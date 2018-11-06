@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,200 +24,12 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-require('../platform/CCObject');
-require('../CCNode');
-var IdGenerater = require('../platform/id-generater');
-var Misc = require('../utils/misc');
+var CCObject = require('../platform/CCObject');
+var js = require('../platform/js');
+var idGenerater = new (require('../platform/id-generater'))('Comp');
 
-var Flags = cc.Object.Flags;
-var IsOnEnableCalled = Flags.IsOnEnableCalled;
-var IsEditorOnEnableCalled = Flags.IsEditorOnEnableCalled;
-var IsPreloadCalled = Flags.IsPreloadCalled;
-var IsOnLoadStarted = Flags.IsOnLoadStarted;
-var IsOnLoadCalled = Flags.IsOnLoadCalled;
-var IsOnStartCalled = Flags.IsOnStartCalled;
-
-// only use eval in editor
-
-var ExecInTryCatchTmpl = CC_EDITOR && '(function call_FUNC_InTryCatch(c){try{c._FUNC_()}catch(e){cc._throw(e)}})';
-if (CC_TEST) {
-    ExecInTryCatchTmpl = '(function call_FUNC_InTryCatch (c) { c._FUNC_() })';
-}
-var callPreloadInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, '__preload'));
-var callOnLoadInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onLoad'));
-var callOnEnableInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onEnable'));
-var callStartInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'start'));
-var callOnDisableInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onDisable'));
-var callOnDestroyInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onDestroy'));
-var callOnFocusInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onFocusInEditor'));
-var callOnLostFocusInTryCatch = CC_EDITOR && eval(ExecInTryCatchTmpl.replace(/_FUNC_/g, 'onLostFocusInEditor'));
-
-function callOnEnable (self, enable) {
-    if (CC_EDITOR) {
-        if (enable) {
-            if ( !(self._objFlags & IsEditorOnEnableCalled) ) {
-                cc.engine.emit('component-enabled', self.uuid);
-                self._objFlags |= IsEditorOnEnableCalled;
-            }
-        }
-        else {
-            if (self._objFlags & IsEditorOnEnableCalled) {
-                cc.engine.emit('component-disabled', self.uuid);
-                self._objFlags &= ~IsEditorOnEnableCalled;
-            }
-        }
-        if ( !(cc.engine.isPlaying || self.constructor._executeInEditMode) ) {
-            return;
-        }
-    }
-    var enableCalled = self._objFlags & IsOnEnableCalled;
-    if (enable) {
-        if (!enableCalled) {
-            if (self.onEnable) {
-                if (CC_EDITOR) {
-                    callOnEnableInTryCatch(self);
-                }
-                else {
-                    self.onEnable();
-                }
-            }
-
-            var deactivatedDuringOnEnable = !self.node._activeInHierarchy;
-            if (deactivatedDuringOnEnable) {
-                return;
-            }
-
-            cc.director.getScheduler().resumeTarget(self);
-            _registerEvent(self, true);
-
-            self._objFlags |= IsOnEnableCalled;
-        }
-    }
-    else if (enableCalled) {
-        if (self.onDisable) {
-            if (CC_EDITOR) {
-                callOnDisableInTryCatch(self);
-            }
-            else {
-                self.onDisable();
-            }
-        }
-
-        cc.director.getScheduler().pauseTarget(self);
-        _registerEvent(self, false);
-
-        self._objFlags &= ~IsOnEnableCalled;
-    }
-}
-
-function _registerEvent (self, on) {
-    if (CC_EDITOR && !(self.constructor._executeInEditMode || cc.engine._isPlaying)) return;
-
-    if (self.start && !(self._objFlags & IsOnStartCalled)) {
-        if (on) {
-            cc.director.on(cc.Director.EVENT_BEFORE_UPDATE, _callStart, self);
-        }
-        else {
-            cc.director.off(cc.Director.EVENT_BEFORE_UPDATE, _callStart, self);
-        }
-    }
-
-    if (!self.update && !self.lateUpdate) {
-        return;
-    }
-
-    if (on) {
-        cc.director.on(cc.Director.EVENT_BEFORE_UPDATE, _registerUpdateEvent, self);
-    }
-    else {
-        cc.director.off(cc.Director.EVENT_BEFORE_UPDATE, _registerUpdateEvent, self);
-        cc.director.off(cc.Director.EVENT_COMPONENT_UPDATE, _callUpdate, self);
-        cc.director.off(cc.Director.EVENT_COMPONENT_LATE_UPDATE, _callLateUpdate, self);
-    }
-}
-
-var _registerUpdateEvent = function () {
-    cc.director.off(cc.Director.EVENT_BEFORE_UPDATE, _registerUpdateEvent, this);
-
-    if (this.update) {
-        cc.director.on(cc.Director.EVENT_COMPONENT_UPDATE, _callUpdate, this);
-    }
-
-    if (this.lateUpdate) {
-        cc.director.on(cc.Director.EVENT_COMPONENT_LATE_UPDATE, _callLateUpdate, this);
-    }
-};
-
-var _callStart = CC_EDITOR ? function () {
-    cc.director.off(cc.Director.EVENT_BEFORE_UPDATE, _callStart, this);
-    callStartInTryCatch(this);
-    this._objFlags |= IsOnStartCalled;
-} : function () {
-    cc.director.off(cc.Director.EVENT_BEFORE_UPDATE, _callStart, this);
-    this.start();
-    this._objFlags |= IsOnStartCalled;
-};
-
-var _callUpdate = CC_EDITOR ? function (event) {
-    try {
-        this.update(event.detail);
-    }
-    catch (e) {
-        cc._throw(e);
-    }
-} : function (event) {
-    this.update(event.detail);
-};
-
-var _callLateUpdate = CC_EDITOR ? function (event) {
-    try {
-        this.lateUpdate(event.detail);
-    }
-    catch (e) {
-        cc._throw(e);
-    }
-} : function (event) {
-    this.lateUpdate(event.detail);
-};
-
-function _callPreloadOnNode (node) {
-    // set _activeInHierarchy to true before invoking onLoad
-    // to allow preload triggered on nodes which created in parent's onLoad dynamically.
-    node._activeInHierarchy = true;
-
-    var comps = node._components;
-    var i = 0, len = comps.length;
-    for (; i < len; ++i) {
-        var component = comps[i];
-        if (component && !(component._objFlags & IsPreloadCalled) && typeof component.__preload === 'function') {
-            if (CC_EDITOR) {
-                callPreloadInTryCatch(component);
-            }
-            else {
-                component.__preload();
-            }
-            component._objFlags |= IsPreloadCalled;
-        }
-    }
-    var children = node._children;
-    for (i = 0, len = children.length; i < len; ++i) {
-        var child = children[i];
-        if (child._active) {
-            _callPreloadOnNode(child);
-        }
-    }
-}
-
-function _callPreloadOnComponent (component) {
-    if (CC_EDITOR) {
-        callPreloadInTryCatch(component);
-    }
-    else {
-        component.__preload();
-    }
-}
-
-var idGenerater = new IdGenerater('Comp');
+var IsOnEnableCalled = CCObject.Flags.IsOnEnableCalled;
+var IsOnLoadCalled = CCObject.Flags.IsOnLoadCalled;
 
 /**
  * !#en
@@ -231,19 +44,28 @@ var idGenerater = new IdGenerater('Comp');
  *
  * @class Component
  * @extends Object
- * @constructor
  */
 var Component = cc.Class({
     name: 'cc.Component',
-    extends: cc.Object,
+    extends: CCObject,
 
-    ctor: function () {
-        if (CC_EDITOR && !CC_TEST && window._Scene) {
+    ctor: CC_EDITOR ? function () {
+        if (window._Scene && _Scene.AssetsWatcher) {
             _Scene.AssetsWatcher.initComponent(this);
         }
+        this._id = Editor.Utils.UuidUtils.uuid();
 
-        // Support for Scheduler
-        this.__instanceId = cc.ClassManager.getNewInstanceId();
+        /**
+         * Register all related EventTargets,
+         * all event callbacks will be removed in _onPreDestroy
+         * @property {Array} __eventTargets
+         * @private
+         */
+        this.__eventTargets = [];
+    } : function () {
+        this._id = idGenerater.getNewId();
+
+        this.__eventTargets = [];
     },
 
     properties: {
@@ -261,7 +83,7 @@ var Component = cc.Class({
         },
 
         name: {
-            get: function () {
+            get () {
                 if (this._name) {
                     return this._name;
                 }
@@ -272,15 +94,10 @@ var Component = cc.Class({
                 }
                 return this.node.name + '<' + className + '>';
             },
-            set: function (value) {
+            set (value) {
                 this._name = value;
             },
             visible: false
-        },
-
-        _id: {
-            default: '',
-            serializable: false
         },
 
         /**
@@ -293,42 +110,35 @@ var Component = cc.Class({
          * cc.log(comp.uuid);
          */
         uuid: {
-            get: function () {
-                var id = this._id;
-                if ( !id ) {
-                    id = this._id = idGenerater.getNewId();
-                    if (CC_EDITOR || CC_TEST) {
-                        cc.engine.attachedObjsForEditor[id] = this;
-                    }
-                }
-                return id;
+            get () {
+                return this._id;
             },
             visible: false
         },
 
         __scriptAsset: CC_EDITOR && {
-            get: function () {},
-            set: function (value) {
-                if (this.__scriptUuid !== value) {
-                    if (value && Editor.UuidUtils.isUuid(value._uuid)) {
-                        var classId = Editor.UuidUtils.compressUuid(value._uuid);
-                        var NewComp = cc.js._getClassById(classId);
-                        if (cc.isChildClassOf(NewComp, cc.Component)) {
-                            cc.warn('Sorry, replacing component script is not yet implemented.');
-                            //Editor.Ipc.sendToWins('reload:window-scripts', Editor._Sandbox.compiled);
-                        }
-                        else {
-                            cc.error('Can not find a component in the script which uuid is "%s".', value._uuid);
-                        }
-                    }
-                    else {
-                        cc.error('Invalid Script');
-                    }
-                }
-            },
+            get () {},
+            //set (value) {
+            //    if (this.__scriptUuid !== value) {
+            //        if (value && Editor.Utils.UuidUtils.isUuid(value._uuid)) {
+            //            var classId = Editor.Utils.UuidUtils.compressUuid(value._uuid);
+            //            var NewComp = cc.js._getClassById(classId);
+            //            if (js.isChildClassOf(NewComp, cc.Component)) {
+            //                cc.warn('Sorry, replacing component script is not yet implemented.');
+            //                //Editor.Ipc.sendToWins('reload:window-scripts', Editor._Sandbox.compiled);
+            //            }
+            //            else {
+            //                cc.error('Can not find a component in the script which uuid is "%s".', value._uuid);
+            //            }
+            //        }
+            //        else {
+            //            cc.error('Invalid Script');
+            //        }
+            //    }
+            //},
             displayName: 'Script',
             type: cc._Script,
-            tooltip: 'i18n:INSPECTOR.component.script'
+            tooltip: CC_DEV && 'i18n:INSPECTOR.component.script'
         },
 
         /**
@@ -349,14 +159,20 @@ var Component = cc.Class({
          * cc.log(comp.enabled);
          */
         enabled: {
-            get: function () {
+            get () {
                 return this._enabled;
             },
-            set: function (value) {
+            set (value) {
                 if (this._enabled !== value) {
                     this._enabled = value;
                     if (this.node._activeInHierarchy) {
-                        callOnEnable(this, value);
+                        var compScheduler = cc.director._compScheduler;
+                        if (value) {
+                            compScheduler.enableComp(this);
+                        }
+                        else {
+                            compScheduler.disableComp(this);
+                        }
                     }
                 }
             },
@@ -365,7 +181,7 @@ var Component = cc.Class({
 
         /**
          * !#en indicates whether this component is enabled and its node is also active in the hierarchy.
-         * !#zh 表示该组件是否被启用并且所在的节点也处于激活状态。。
+         * !#zh 表示该组件是否被启用并且所在的节点也处于激活状态。
          * @property enabledInHierarchy
          * @type {Boolean}
          * @readOnly
@@ -373,38 +189,26 @@ var Component = cc.Class({
          * cc.log(comp.enabledInHierarchy);
          */
         enabledInHierarchy: {
-            get: function () {
-                return this._objFlags & IsOnEnableCalled;
+            get () {
+                return (this._objFlags & IsOnEnableCalled) > 0;
             },
             visible: false
         },
 
         /**
-         * !#en TODO
-         * !#zh onLoad 是否被调用。
+         * !#en Returns a value which used to indicate the onLoad get called or not.
+         * !#zh 返回一个值用来判断 onLoad 是否被调用过，不等于 0 时调用过，等于 0 时未调用。
          * @property _isOnLoadCalled
-         * @type {Boolean}
+         * @type {Number}
          * @readOnly
          * @example
-         * cc.log(_isOnLoadCalled);
+         * cc.log(this._isOnLoadCalled > 0);
          */
         _isOnLoadCalled: {
-            get: function () {
+            get () {
                 return this._objFlags & IsOnLoadCalled;
             }
         },
-
-        /**
-         * Register all related EventTargets,
-         * all event callbacks will be removed in _onPreDestroy
-         * @property __eventTargets
-         * @type {Array}
-         * @private
-         */
-        __eventTargets: {
-            default: [],
-            serializable: false
-        }
     },
 
     // LIFECYCLE METHODS
@@ -413,16 +217,23 @@ var Component = cc.Class({
     // We provide Pre methods, which are called right before something happens, and Post methods which are called right after something happens.
 
     /**
-     * !#en Update is called every frame, if the Component is enabled.
-     * !#zh 如果该组件启用，则每帧调用 update。
+     * !#en Update is called every frame, if the Component is enabled.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh 如果该组件启用，则每帧调用 update。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method update
+     * @param {Number} dt - the delta time in seconds it took to complete the last frame
+     * @protected
      */
     update: null,
 
     /**
-     * !#en LateUpdate is called every frame, if the Component is enabled.
-     * !#zh 如果该组件启用，则每帧调用 LateUpdate。
+     * !#en LateUpdate is called every frame, if the Component is enabled.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh 如果该组件启用，则每帧调用 LateUpdate。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method lateUpdate
+     * @protected
      */
     lateUpdate: null,
 
@@ -438,48 +249,78 @@ var Component = cc.Class({
     __preload: null,
 
     /**
-     * !#en When attaching to an active node or its node first activated.
-     * !#zh 当附加到一个激活的节点上或者其节点第一次激活时候调用。
+     * !#en
+     * When attaching to an active node or its node first activated.
+     * onLoad is always called before any start functions, this allows you to order initialization of scripts.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh
+     * 当附加到一个激活的节点上或者其节点第一次激活时候调用。onLoad 总是会在任何 start 方法调用前执行，这能用于安排脚本的初始化顺序。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method onLoad
+     * @protected
      */
     onLoad: null,
 
     /**
-     * !#en Called before all scripts' update if the Component is enabled.
-     * !#zh 如果该组件启用，则在所有组件的 update 之前调用。
+     * !#en
+     * Called before all scripts' update if the Component is enabled the first time.
+     * Usually used to initialize some logic which need to be called after all components' `onload` methods called.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh
+     * 如果该组件第一次启用，则在所有组件的 update 之前调用。通常用于需要在所有组件的 onLoad 初始化完毕后执行的逻辑。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method start
+     * @protected
      */
     start: null,
 
     /**
-     * !#en Called when this component becomes enabled and its node is active.
-     * !#zh 当该组件被启用，并且它的节点也激活时。
+     * !#en Called when this component becomes enabled and its node is active.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh 当该组件被启用，并且它的节点也激活时。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method onEnable
+     * @protected
      */
     onEnable: null,
 
     /**
-     * !#en Called when this component becomes disabled or its node becomes inactive.
-     * !#zh 当该组件被禁用或节点变为无效时调用。
+     * !#en Called when this component becomes disabled or its node becomes inactive.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh 当该组件被禁用或节点变为无效时调用。<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method onDisable
+     * @protected
      */
     onDisable: null,
 
     /**
-     * !#en Called when this component will be destroyed.
-     * !#zh 当该组件被销毁时调用
+     * !#en Called when this component will be destroyed.<br/>
+     * This is a lifecycle method. It may not be implemented in the super class. You can only call its super class method inside it. It should not be called manually elsewhere.
+     * !#zh 当该组件被销毁时调用<br/>
+     * 该方法为生命周期方法，父类未必会有实现。并且你只能在该方法内部调用父类的实现，不可在其它地方直接调用该方法。
      * @method onDestroy
+     * @protected
      */
     onDestroy: null,
 
     /**
      * @method onFocusInEditor
+     * @protected
      */
     onFocusInEditor: null,
     /**
      * @method onLostFocusInEditor
+     * @protected
      */
     onLostFocusInEditor: null,
+    /**
+     * !#en Called to initialize the component or node’s properties when adding the component the first time or when the Reset command is used. This function is only called in editor.
+     * !#zh 用来初始化组件或节点的一些属性，当该组件被第一次添加到节点上或用户点击了它的 Reset 菜单时调用。这个回调只会在编辑器下调用。
+     * @method resetInEditor
+     * @protected
+     */
+    resetInEditor: null,
 
     // PUBLIC
 
@@ -488,14 +329,17 @@ var Component = cc.Class({
      * !#zh 向节点添加一个组件类，你还可以通过传入脚本的名称来添加组件。
      *
      * @method addComponent
-     * @param {Function|String} typeOrTypename - the constructor or the class name of the component to add
+     * @param {Function|String} typeOrClassName - the constructor or the class name of the component to add
      * @return {Component} - the newly added component
      * @example
      * var sprite = node.addComponent(cc.Sprite);
      * var test = node.addComponent("Test");
+     * @typescript
+     * addComponent<T extends Component>(type: {new(): T}): T
+     * addComponent(className: string): any
      */
-    addComponent: function (typeOrTypename) {
-        return this.node.addComponent(typeOrTypename);
+    addComponent (typeOrClassName) {
+        return this.node.addComponent(typeOrClassName);
     },
 
     /**
@@ -514,8 +358,11 @@ var Component = cc.Class({
      * var sprite = node.getComponent(cc.Sprite);
      * // get custom test calss.
      * var test = node.getComponent("Test");
+     * @typescript
+     * getComponent<T extends Component>(type: {prototype: T}): T
+     * getComponent(className: string): any
      */
-    getComponent: function (typeOrClassName) {
+    getComponent (typeOrClassName) {
         return this.node.getComponent(typeOrClassName);
     },
 
@@ -529,8 +376,11 @@ var Component = cc.Class({
      * @example
      * var sprites = node.getComponents(cc.Sprite);
      * var tests = node.getComponents("Test");
+     * @typescript
+     * getComponents<T extends Component>(type: {prototype: T}): T[]
+     * getComponents(className: string): any[]
      */
-    getComponents: function (typeOrClassName) {
+    getComponents (typeOrClassName) {
         return this.node.getComponents(typeOrClassName);
     },
 
@@ -544,14 +394,17 @@ var Component = cc.Class({
      * @example
      * var sprite = node.getComponentInChildren(cc.Sprite);
      * var Test = node.getComponentInChildren("Test");
+     * @typescript
+     * getComponentInChildren<T extends Component>(type: {prototype: T}): T
+     * getComponentInChildren(className: string): any
      */
-    getComponentInChildren: function (typeOrClassName) {
+    getComponentInChildren (typeOrClassName) {
         return this.node.getComponentInChildren(typeOrClassName);
     },
 
     /**
-     * !#en Returns the components of supplied type in any of its children using depth first search.
-     * !#zh 递归查找所有子节点中指定类型的组件。
+     * !#en Returns the components of supplied type in self or any of its children using depth first search.
+     * !#zh 递归查找自身或所有子节点中指定类型的组件
      *
      * @method getComponentsInChildren
      * @param {Function|String} typeOrClassName
@@ -559,8 +412,11 @@ var Component = cc.Class({
      * @example
      * var sprites = node.getComponentsInChildren(cc.Sprite);
      * var tests = node.getComponentsInChildren("Test");
+     * @typescript
+     * getComponentsInChildren<T extends Component>(type: {prototype: T}): T[]
+     * getComponentsInChildren(className: string): any[]
      */
-    getComponentsInChildren: function (typeOrClassName) {
+    getComponentsInChildren (typeOrClassName) {
         return this.node.getComponentsInChildren(typeOrClassName);
     },
 
@@ -624,126 +480,54 @@ var Component = cc.Class({
 
     // OVERRIDE
 
-    destroy: function () {
+    destroy () {
         if (CC_EDITOR) {
             var depend = this.node._getDependComponent(this);
             if (depend) {
-                return cc.error("Can't remove '%s' because '%s' depends on it.",
+                return cc.errorID(3626,
                     cc.js.getClassName(this), cc.js.getClassName(depend));
             }
         }
         if (this._super()) {
             if (this._enabled && this.node._activeInHierarchy) {
-                callOnEnable(this, false);
+                cc.director._compScheduler.disableComp(this);
             }
         }
     },
 
-    __onNodeActivated: CC_EDITOR ? function (active) {
-        if (active && !(this._objFlags & IsOnLoadStarted) &&
-            (cc.engine._isPlaying || this.constructor._executeInEditMode)) {
-            this._objFlags |= IsOnLoadStarted;
-
-            if (this.onLoad) {
-                callOnLoadInTryCatch(this);
-            }
-
-            this._objFlags |= IsOnLoadCalled;
-
-            if (this.onLoad && !cc.engine._isPlaying) {
-                var focused = Editor.Selection.curActivate('node') === this.node.uuid;
-                if (focused && this.onFocusInEditor) {
-                    callOnFocusInTryCatch(this);
-                }
-                else if (this.onLostFocusInEditor) {
-                    callOnLostFocusInTryCatch(this);
-                }
-            }
-            if ( !CC_TEST ) {
-                _Scene.AssetsWatcher.start(this);
-            }
-        }
-        if (this._enabled) {
-            if (active) {
-                var deactivatedOnLoading = !this.node._activeInHierarchy;
-                if (deactivatedOnLoading) {
-                    return;
-                }
-            }
-            callOnEnable(this, active);
-        }
-    } : function (active) {
-        if (active && !(this._objFlags & IsOnLoadStarted)) {
-            this._objFlags |= IsOnLoadStarted;
-            if (this.onLoad) {
-                this.onLoad();
-            }
-            this._objFlags |= IsOnLoadCalled;
-        }
-        if (this._enabled) {
-            if (active) {
-                var deactivatedOnLoading = !this.node._activeInHierarchy;
-                if (deactivatedOnLoading) {
-                    return;
-                }
-            }
-            callOnEnable(this, active);
-        }
-    },
-
-    _onPreDestroy: function () {
-        var i, l, target;
-        // ensure onDisable called
-        callOnEnable(this, false);
-
+    _onPreDestroy () {
         // Schedules
         this.unscheduleAllCallbacks();
 
         // Remove all listeners
-        for (i = 0, l = this.__eventTargets.length; i < l; ++i) {
-            target = this.__eventTargets[i];
+        var eventTargets = this.__eventTargets;
+        for (var i = 0, l = eventTargets.length; i < l; ++i) {
+            var target = eventTargets[i];
             target && target.targetOff(this);
         }
-        this.__eventTargets.length = 0;
+        eventTargets.length = 0;
 
-        // Remove all listeners
-        cc.eventManager.removeListeners(this);
+        //
+        if (CC_EDITOR && !CC_TEST) {
+            _Scene.AssetsWatcher.stop(this);
+        }
 
         // onDestroy
-        if (CC_EDITOR) {
-            if ( !CC_TEST ) {
-                _Scene.AssetsWatcher.stop(this);
-            }
-            if (cc.engine._isPlaying || this.constructor._executeInEditMode) {
-                if (this.onDestroy) {
-                    callOnDestroyInTryCatch(this);
-                }
-            }
-        }
-        else if (this.onDestroy) {
-            this.onDestroy();
-        }
+        cc.director._nodeActivator.destroyComp(this);
+
         // do remove component
         this.node._removeComponent(this);
-
-        if (CC_EDITOR || CC_TEST) {
-            delete cc.engine.attachedObjsForEditor[this._id];
-        }
     },
 
-    _destruct: Misc.destructIgnoreId,
-
-    _instantiate: function () {
-        var clone = cc.instantiate._clone(this, this);
-        clone.node = null;
-        return clone;
+    _instantiate (cloned) {
+        if (!cloned) {
+            cloned = cc.instantiate._clone(this, this);
+        }
+        cloned.node = null;
+        return cloned;
     },
 
 // Scheduler
-
-    isRunning: function () {
-        return this.enabledInHierarchy;
-    },
 
     /**
      * !#en
@@ -754,8 +538,8 @@ var Component = cc.Class({
      * 如果回调函数已调度，那么将不会重复调度它，只会更新时间间隔参数。
      * @method schedule
      * @param {function} callback The callback function
-     * @param {Number} [interval=0]  Tick interval in seconds. 0 means tick every frame. If interval = 0, it's recommended to use scheduleUpdate() instead.
-     * @param {Number} [repeat=cc.macro.REPEAT_FOREVER]    The selector will be executed (repeat + 1) times, you can use kCCRepeatForever for tick infinitely.
+     * @param {Number} [interval=0]  Tick interval in seconds. 0 means tick every frame.
+     * @param {Number} [repeat=cc.macro.REPEAT_FOREVER]    The selector will be executed (repeat + 1) times, you can use cc.macro.REPEAT_FOREVER for tick infinitely.
      * @param {Number} [delay=0]     The amount of time that the first tick will wait before execution.
      * @example
      * var timeCallback = function (dt) {
@@ -763,15 +547,23 @@ var Component = cc.Class({
      * }
      * this.schedule(timeCallback, 1);
      */
-    schedule: function (callback, interval, repeat, delay) {
-        cc.assert(callback, cc._LogInfos.Node.schedule);
-        cc.assert(interval >= 0, cc._LogInfos.Node.schedule_2);
+    schedule (callback, interval, repeat, delay) {
+        cc.assertID(callback, 1619);
+        cc.assertID(interval >= 0, 1620);
 
         interval = interval || 0;
         repeat = isNaN(repeat) ? cc.macro.REPEAT_FOREVER : repeat;
         delay = delay || 0;
 
-        cc.director.getScheduler().schedule(callback, this, interval, repeat, delay, !this.enabledInHierarchy);
+        var scheduler = cc.director.getScheduler();
+
+        // should not use enabledInHierarchy to judge whether paused,
+        // because enabledInHierarchy is assigned after onEnable.
+        // Actually, if not yet scheduled, resumeTarget/pauseTarget has no effect on component,
+        // therefore there is no way to guarantee the paused state other than isTargetPaused.
+        var paused = scheduler.isTargetPaused(this);
+
+        scheduler.schedule(callback, this, interval, repeat, delay, paused);
     },
 
     /**
@@ -787,7 +579,7 @@ var Component = cc.Class({
      * }
      * this.scheduleOnce(timeCallback, 2);
      */
-    scheduleOnce: function (callback, delay) {
+    scheduleOnce (callback, delay) {
         this.schedule(callback, 0, 0, delay);
     },
 
@@ -800,7 +592,7 @@ var Component = cc.Class({
      * @example
      * this.unschedule(_callback);
      */
-    unschedule: function (callback_fn) {
+    unschedule (callback_fn) {
         if (!callback_fn)
             return;
 
@@ -816,12 +608,13 @@ var Component = cc.Class({
      * @example
      * this.unscheduleAllCallbacks();
      */
-    unscheduleAllCallbacks: function () {
+    unscheduleAllCallbacks () {
         cc.director.getScheduler().unscheduleAllForTarget(this);
     },
 });
 
 Component._requireComponent = null;
+Component._executionOrder = 0;
 
 if (CC_EDITOR || CC_TEST) {
 
@@ -833,9 +626,10 @@ if (CC_EDITOR || CC_TEST) {
     Component._help = '';
 
     // NON-INHERITED STATIC MEMBERS
+    // (TypeScript 2.3 will still inherit them, so always check hasOwnProperty before using)
 
-    Object.defineProperty(Component, '_inspector', { value: '', writable: true });
-    Object.defineProperty(Component, '_icon', { value: '', writable: true });
+    js.value(Component, '_inspector', '', true);
+    js.value(Component, '_icon', '', true);
 
     // COMPONENT HELPERS
 
@@ -850,74 +644,67 @@ if (CC_EDITOR || CC_TEST) {
     };
 }
 
-// use defineProperty to prevent inherited by sub classes
-Object.defineProperty(Component, '_registerEditorProps', {
-    value: function (cls, props) {
-        var reqComp = props.requireComponent;
-        if (reqComp) {
-            cls._requireComponent = reqComp;
-        }
-        if (CC_EDITOR || CC_TEST) {
-            var name = cc.js.getClassName(cls);
-            for (var key in props) {
-                var val = props[key];
-                switch (key) {
+// we make this non-enumerable, to prevent inherited by sub classes.
+js.value(Component, '_registerEditorProps', function (cls, props) {
+    var reqComp = props.requireComponent;
+    if (reqComp) {
+        cls._requireComponent = reqComp;
+    }
+    var order = props.executionOrder;
+    if (order && typeof order === 'number') {
+        cls._executionOrder = order;
+    }
+    if (CC_EDITOR || CC_TEST) {
+        var name = cc.js.getClassName(cls);
+        for (var key in props) {
+            var val = props[key];
+            switch (key) {
+                case 'executeInEditMode':
+                    cls._executeInEditMode = !!val;
+                    break;
 
-                    case 'executeInEditMode':
-                        cls._executeInEditMode = !!val;
-                        break;
-
-                    case 'playOnFocus':
-                        if (val) {
-                            var willExecuteInEditMode = ('executeInEditMode' in props) ? props.executeInEditMode : cls._executeInEditMode;
-                            if (willExecuteInEditMode) {
-                                cls._playOnFocus = true;
-                            }
-                            else {
-                                cc.warn('The editor property "playOnFocus" should be used with "executeInEditMode" in class "%s".', name);
-                            }
+                case 'playOnFocus':
+                    if (val) {
+                        var willExecuteInEditMode = ('executeInEditMode' in props) ? props.executeInEditMode : cls._executeInEditMode;
+                        if (willExecuteInEditMode) {
+                            cls._playOnFocus = true;
                         }
-                        break;
+                        else {
+                            cc.warnID(3601, name);
+                        }
+                    }
+                    break;
 
-                    case 'inspector':
-                        Object.defineProperty(cls, '_inspector', { value: val, writable: true });
-                        break;
+                case 'inspector':
+                    js.value(cls, '_inspector', val, true);
+                    break;
 
-                    case 'icon':
-                        Object.defineProperty(cls, '_icon', { value: val, writable: true });
-                        break;
+                case 'icon':
+                    js.value(cls, '_icon', val, true);
+                    break;
 
-                    case 'menu':
-                        Component._addMenuItem(cls, val, props.menuPriority);
-                        break;
+                case 'menu':
+                    Component._addMenuItem(cls, val, props.menuPriority);
+                    break;
 
-                    case 'disallowMultiple':
-                        cls._disallowMultiple = cls;
-                        break;
+                case 'disallowMultiple':
+                    cls._disallowMultiple = cls;
+                    break;
 
-                    case 'requireComponent':
-                        // skip here
-                        break;
+                case 'requireComponent':
+                case 'executionOrder':
+                    // skip here
+                    break;
 
-                    case 'help':
-                        cls._help = val;
-                        break;
+                case 'help':
+                    cls._help = val;
+                    break;
 
-                    default:
-                        cc.warn('Unknown editor property "%s" in class "%s".', key, name);
-                        break;
-                }
+                default:
+                    cc.warnID(3602, key, name);
+                    break;
             }
         }
-    }
-});
-
-Object.defineProperties(Component, {
-    _callPreloadOnNode: {
-        value: _callPreloadOnNode
-    },
-    _callPreloadOnComponent: {
-        value: _callPreloadOnComponent
     }
 });
 

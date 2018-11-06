@@ -1,7 +1,8 @@
 /****************************************************************************
  Copyright (c) 2008-2010 Ricardo Quesada
  Copyright (c) 2011-2012 cocos2d-x.org
- Copyright (c) 2013-2014 Chukong Technologies Inc.
+ Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
@@ -24,865 +25,18 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-require('./_CCClass');
-
-cc._tmp = cc._tmp || {};
-
-/**
- * Key map for keyboard event
- * @enum KEY
- * @readonly
- * @type {Object}
- * @example {@link utils/api/engine/docs/cocos2d/core/platform/CCCommon/KEY.js}
- */
-cc.KEY = {
-    /**
-     * @property none
-     * @type {Number}
-     * @readonly
-     */
-    none:0,
-
-    // android
-    /**
-     * @property back
-     * @type {Number}
-     * @readonly
-     */
-    back:6,
-    /**
-     * @property menu
-     * @type {Number}
-     * @readonly
-     */
-    menu:18,
-
-    /**
-     * @property backspace
-     * @type {Number}
-     * @readonly
-     */
-    backspace:8,
-    /**
-     * @property tab
-     * @type {Number}
-     * @readonly
-     */
-    tab:9,
-
-    /**
-     * @property enter
-     * @type {Number}
-     * @readonly
-     */
-    enter:13,
-
-    /**
-     * @property shift
-     * @type {Number}
-     * @readonly
-     */
-    shift:16, //should use shiftkey instead
-    /**
-     * @property ctrl
-     * @type {Number}
-     * @readonly
-     */
-    ctrl:17, //should use ctrlkey
-    /**
-     * @property alt
-     * @type {Number}
-     * @readonly
-     */
-    alt:18, //should use altkey
-    /**
-     * @property pause
-     * @type {Number}
-     * @readonly
-     */
-    pause:19,
-    /**
-     * @property capslock
-     * @type {Number}
-     * @readonly
-     */
-    capslock:20,
-    /**
-     * @property escape
-     * @type {Number}
-     * @readonly
-     */
-    escape:27,
-    /**
-     * @property space
-     * @type {Number}
-     * @readonly
-     */
-    space:32,
-    /**
-     * @property pageup
-     * @type {Number}
-     * @readonly
-     */
-    pageup:33,
-    /**
-     * @property pagedown
-     * @type {Number}
-     * @readonly
-     */
-    pagedown:34,
-    /**
-     * @property end
-     * @type {Number}
-     * @readonly
-     */
-    end:35,
-    /**
-     * @property home
-     * @type {Number}
-     * @readonly
-     */
-    home:36,
-    /**
-     * @property left
-     * @type {Number}
-     * @readonly
-     */
-    left:37,
-    /**
-     * @property up
-     * @type {Number}
-     * @readonly
-     */
-    up:38,
-    /**
-     * @property right
-     * @type {Number}
-     * @readonly
-     */
-    right:39,
-    /**
-     * @property down
-     * @type {Number}
-     * @readonly
-     */
-    down:40,
-    /**
-     * @property select
-     * @type {Number}
-     * @readonly
-     */
-    select:41,
-
-    /**
-     * @property insert
-     * @type {Number}
-     * @readonly
-     */
-    insert:45,
-    /**
-     * @property Delete
-     * @type {Number}
-     * @readonly
-     */
-    Delete:46,
-    /**
-     * @property 0
-     * @type {Number}
-     * @readonly
-     */
-    0:48,
-    /**
-     * @property 1
-     * @type {Number}
-     * @readonly
-     */
-    1:49,
-    /**
-     * @property 2
-     * @type {Number}
-     * @readonly
-     */
-    2:50,
-    /**
-     * @property 3
-     * @type {Number}
-     * @readonly
-     */
-    3:51,
-    /**
-     * @property 4
-     * @type {Number}
-     * @readonly
-     */
-    4:52,
-    /**
-     * @property 5
-     * @type {Number}
-     * @readonly
-     */
-    5:53,
-    /**
-     * @property 6
-     * @type {Number}
-     * @readonly
-     */
-    6:54,
-    /**
-     * @property 7
-     * @type {Number}
-     * @readonly
-     */
-    7:55,
-    /**
-     * @property 8
-     * @type {Number}
-     * @readonly
-     */
-    8:56,
-    /**
-     * @property 9
-     * @type {Number}
-     * @readonly
-     */
-    9:57,
-    /**
-     * @property a
-     * @type {Number}
-     * @readonly
-     */
-    a:65,
-    /**
-     * @property b
-     * @type {Number}
-     * @readonly
-     */
-    b:66,
-    /**
-     * @property c
-     * @type {Number}
-     * @readonly
-     */
-    c:67,
-    /**
-     * @property d
-     * @type {Number}
-     * @readonly
-     */
-    d:68,
-    /**
-     * @property e
-     * @type {Number}
-     * @readonly
-     */
-    e:69,
-    /**
-     * @property f
-     * @type {Number}
-     * @readonly
-     */
-    f:70,
-    /**
-     * @property g
-     * @type {Number}
-     * @readonly
-     */
-    g:71,
-    /**
-     * @property h
-     * @type {Number}
-     * @readonly
-     */
-    h:72,
-    /**
-     * @property i
-     * @type {Number}
-     * @readonly
-     */
-    i:73,
-    /**
-     * @property j
-     * @type {Number}
-     * @readonly
-     */
-    j:74,
-    /**
-     * @property k
-     * @type {Number}
-     * @readonly
-     */
-    k:75,
-    /**
-     * @property l
-     * @type {Number}
-     * @readonly
-     */
-    l:76,
-    /**
-     * @property m
-     * @type {Number}
-     * @readonly
-     */
-    m:77,
-    /**
-     * @property n
-     * @type {Number}
-     * @readonly
-     */
-    n:78,
-    /**
-     * @property o
-     * @type {Number}
-     * @readonly
-     */
-    o:79,
-    /**
-     * @property p
-     * @type {Number}
-     * @readonly
-     */
-    p:80,
-    /**
-     * @property q
-     * @type {Number}
-     * @readonly
-     */
-    q:81,
-    /**
-     * @property r
-     * @type {Number}
-     * @readonly
-     */
-    r:82,
-    /**
-     * @property s
-     * @type {Number}
-     * @readonly
-     */
-    s:83,
-    /**
-     * @property t
-     * @type {Number}
-     * @readonly
-     */
-    t:84,
-    /**
-     * @property u
-     * @type {Number}
-     * @readonly
-     */
-    u:85,
-    /**
-     * @property v
-     * @type {Number}
-     * @readonly
-     */
-    v:86,
-    /**
-     * @property w
-     * @type {Number}
-     * @readonly
-     */
-    w:87,
-    /**
-     * @property x
-     * @type {Number}
-     * @readonly
-     */
-    x:88,
-    /**
-     * @property y
-     * @type {Number}
-     * @readonly
-     */
-    y:89,
-    /**
-     * @property z
-     * @type {Number}
-     * @readonly
-     */
-    z:90,
-
-    /**
-     * @property num0
-     * @type {Number}
-     * @readonly
-     */
-    num0:96,
-    /**
-     * @property num1
-     * @type {Number}
-     * @readonly
-     */
-    num1:97,
-    /**
-     * @property num2
-     * @type {Number}
-     * @readonly
-     */
-    num2:98,
-    /**
-     * @property num3
-     * @type {Number}
-     * @readonly
-     */
-    num3:99,
-    /**
-     * @property num4
-     * @type {Number}
-     * @readonly
-     */
-    num4:100,
-    /**
-     * @property num5
-     * @type {Number}
-     * @readonly
-     */
-    num5:101,
-    /**
-     * @property num6
-     * @type {Number}
-     * @readonly
-     */
-    num6:102,
-    /**
-     * @property num7
-     * @type {Number}
-     * @readonly
-     */
-    num7:103,
-    /**
-     * @property num8
-     * @type {Number}
-     * @readonly
-     */
-    num8:104,
-    /**
-     * @property num9
-     * @type {Number}
-     * @readonly
-     */
-    num9:105,
-    /**
-     * @property {Number} *
-     * @readonly
-     */
-    '*':106,
-    /**
-     * @property {Number} +
-     * @readonly
-     */
-    '+':107,
-    /**
-     * @property {Number} -
-     * @readonly
-     */
-    '-':109,
-    /**
-     * @property numdel
-     * @type {Number}
-     * @readonly
-     */
-    'numdel':110,
-    /**
-     * @property {Number} /
-     * @readonly
-     */
-    '/':111,
-    /**
-     * @property f1
-     * @type {Number}
-     * @readonly
-     */
-    f1:112, //f1-f12 dont work on ie
-    /**
-     * @property f2
-     * @type {Number}
-     * @readonly
-     */
-    f2:113,
-    /**
-     * @property f3
-     * @type {Number}
-     * @readonly
-     */
-    f3:114,
-    /**
-     * @property f4
-     * @type {Number}
-     * @readonly
-     */
-    f4:115,
-    /**
-     * @property f5
-     * @type {Number}
-     * @readonly
-     */
-    f5:116,
-    /**
-     * @property f6
-     * @type {Number}
-     * @readonly
-     */
-    f6:117,
-    /**
-     * @property f7
-     * @type {Number}
-     * @readonly
-     */
-    f7:118,
-    /**
-     * @property f8
-     * @type {Number}
-     * @readonly
-     */
-    f8:119,
-    /**
-     * @property f9
-     * @type {Number}
-     * @readonly
-     */
-    f9:120,
-    /**
-     * @property f10
-     * @type {Number}
-     * @readonly
-     */
-    f10:121,
-    /**
-     * @property f11
-     * @type {Number}
-     * @readonly
-     */
-    f11:122,
-    /**
-     * @property f12
-     * @type {Number}
-     * @readonly
-     */
-    f12:123,
-
-    /**
-     * @property numlock
-     * @type {Number}
-     * @readonly
-     */
-    numlock:144,
-    /**
-     * @property scrolllock
-     * @type {Number}
-     * @readonly
-     */
-    scrolllock:145,
-
-    /**
-     * @property {Number} ;
-     * @readonly
-     */
-    ';':186,
-    /**
-     * @property semicolon
-     * @type {Number}
-     * @readonly
-     */
-    semicolon:186,
-    /**
-     * @property equal
-     * @type {Number}
-     * @readonly
-     */
-    equal:187,
-    /**
-     * @property {Number} =
-     * @readonly
-     */
-    '=':187,
-    /**
-     * @property {Number} ,
-     * @readonly
-     */
-    ',':188,
-    /**
-     * @property comma
-     * @type {Number}
-     * @readonly
-     */
-    comma:188,
-    /**
-     * @property dash
-     * @type {Number}
-     * @readonly
-     */
-    dash:189,
-    /**
-     * @property {Number} .
-     * @readonly
-     */
-    '.':190,
-    /**
-     * @property period
-     * @type {Number}
-     * @readonly
-     */
-    period:190,
-    /**
-     * @property forwardslash
-     * @type {Number}
-     * @readonly
-     */
-    forwardslash:191,
-    /**
-     * @property grave
-     * @type {Number}
-     * @readonly
-     */
-    grave:192,
-    /**
-     * @property {Number} [
-     * @readonly
-     */
-    '[':219,
-    /**
-     * @property openbracket
-     * @type {Number}
-     * @readonly
-     */
-    openbracket:219,
-    /**
-     * @property backslash
-     * @type {Number}
-     * @readonly
-     */
-    backslash:220,
-    /**
-     * @property {Number} ]
-     * @readonly
-     */
-    ']':221,
-    /**
-     * @property closebracket
-     * @type {Number}
-     * @readonly
-     */
-    closebracket:221,
-    /**
-     * @property quote
-     * @type {Number}
-     * @readonly
-     */
-    quote:222,
-
-    // gamepad controll
-    /**
-     * @property dpadLeft
-     * @type {Number}
-     * @readonly
-     */
-    dpadLeft:1000,
-    /**
-     * @property dpadRight
-     * @type {Number}
-     * @readonly
-     */
-    dpadRight:1001,
-    /**
-     * @property dpadUp
-     * @type {Number}
-     * @readonly
-     */
-    dpadUp:1003,
-    /**
-     * @property dpadDown
-     * @type {Number}
-     * @readonly
-     */
-    dpadDown:1004,
-    /**
-     * @property dpadCenter
-     * @type {Number}
-     * @readonly
-     */
-    dpadCenter:1005
-};
-
-/**
- * @module cc
- */
-
-/**
- * Image formats
- * @enum ImageFormat
- * @static
- * @namespace cc
- */
-cc.ImageFormat = cc.Enum({
-    /**
-     * Image Format:JPG
-     * @property JPG
-     * @type {Number}
-     * @static
-     */
-    JPG: 0,
-    /**
-     * Image Format:PNG
-     * @property PNG
-     * @type {Number}
-     * @static
-     */
-    PNG: 1,
-    /**
-     * Image Format:TIFF
-     * @property TIFF
-     * @type {Number}
-     * @static
-     */
-    TIFF: 2,
-    /**
-     * Image Format:WEBP
-     * @property WEBP
-     * @type {Number}
-     * @static
-     */
-    WEBP: 3,
-    /**
-     * Image Format:PVR
-     * @property PVR
-     * @type {Number}
-     * @static
-     */
-    PVR: 4,
-    /**
-     * Image Format:ETC
-     * @property ETC
-     * @type {Number}
-     * @static
-     */
-    ETC: 5,
-    /**
-     * Image Format:S3TC
-     * @property S3TC
-     * @type {Number}
-     * @static
-     */
-    S3TC: 6,
-    /**
-     * Image Format:ATITC
-     * @property ATITC
-     * @type {Number}
-     * @static
-     */
-    ATITC: 7,
-    /**
-     * Image Format:TGA
-     * @property TGA
-     * @type {Number}
-     * @static
-     */
-    TGA: 8,
-    /**
-     * Image Format:RAWDATA
-     * @property RAWDATA
-     * @type {Number}
-     * @static
-     */
-    RAWDATA: 9,
-    /**
-     * Image Format:UNKNOWN
-     * @property UNKNOWN
-     * @type {Number}
-     * @static
-     */
-    UNKNOWN: 10
-});
-
-/**
- * get image format by image data
- * @method getImageFormatByData
- * @param {Array} imgData
- * @returns {Number}
- */
-cc.getImageFormatByData = function (imgData) {
-    // if it is a png file buffer.
-    if (imgData.length > 8 && imgData[0] === 0x89
-        && imgData[1] === 0x50
-        && imgData[2] === 0x4E
-        && imgData[3] === 0x47
-        && imgData[4] === 0x0D
-        && imgData[5] === 0x0A
-        && imgData[6] === 0x1A
-        && imgData[7] === 0x0A) {
-        return cc.ImageFormat.PNG;
-    }
-
-    // if it is a tiff file buffer.
-    if (imgData.length > 2 && ((imgData[0] === 0x49 && imgData[1] === 0x49)
-        || (imgData[0] === 0x4d && imgData[1] === 0x4d)
-        || (imgData[0] === 0xff && imgData[1] === 0xd8))) {
-        return cc.ImageFormat.TIFF;
-    }
-    return cc.ImageFormat.UNKNOWN;
-};
+const js = require('./js');
 
 /**
  * Predefined constants
- * @enum Macro
+ * @class macro
  * @static
- * @type {Object}
- * @namespace cc
  */
 cc.macro = {
-    /**
-     * @property INVALID_INDEX
-     * @type {Number}
-     * @readonly
-     */
-    INVALID_INDEX: -1,
-
-    /**
-     * Default Node tag
-     * @property NODE_TAG_INVALID
-     * @type {Number}
-     * @readonly
-     */
-    NODE_TAG_INVALID: -1,
-
-    /**
-     * PI is the ratio of a circle's circumference to its diameter.
-     * @property PI
-     * @type {Number}
-     * @readonly
-     */
-    PI: Math.PI,
-
-    /**
-     * PI * 2
-     * @property PI2
-     * @type {Number}
-     * @readonly
-     */
-    PI2: Math.PI * 2,
-
-    /**
-     * Maximum float value
-     * @property FLT_MAX
-     * @type {Number}
-     * @readonly
-     */
-    FLT_MAX: parseFloat('3.402823466e+38F'),
-
-    /**
-     * Minimum float value
-     * @property FLT_MIN
-     * @type {Number}
-     * @readonly
-     */
-    FLT_MIN: parseFloat("1.175494351e-38F"),
-
     /**
      * PI / 180
      * @property RAD
      * @type {Number}
-     * @readonly
      */
     RAD: Math.PI / 180,
 
@@ -890,180 +44,119 @@ cc.macro = {
      * One degree
      * @property DEG
      * @type {Number}
-     * @readonly
      */
     DEG: 180 / Math.PI,
 
     /**
-     * Maximum unsigned int value
-     * @property UINT_MAX
-     * @type {Number}
-     * @readonly
-     */
-    UINT_MAX: 0xffffffff,
-
-    /**
      * @property REPEAT_FOREVER
      * @type {Number}
-     * @readonly
      */
-    REPEAT_FOREVER: CC_JSB ? 0xffffffff : (Number.MAX_VALUE - 1),
+    REPEAT_FOREVER: (Number.MAX_VALUE - 1),
 
     /**
      * @property FLT_EPSILON
      * @type {Number}
-     * @readonly
      */
     FLT_EPSILON: 0.0000001192092896,
+
+    /**
+     * Minimum z index value for node
+     * @property MIN_ZINDEX
+     * @type {Number}
+     */
+    MIN_ZINDEX: -Math.pow(2, 15),
+
+    /**
+     * Maximum z index value for node
+     * @property MAX_ZINDEX
+     * @type {Number}
+     */
+    MAX_ZINDEX: Math.pow(2, 15) - 1,
 
     //some gl constant variable
     /**
      * @property ONE
      * @type {Number}
-     * @readonly
      */
     ONE: 1,
 
     /**
      * @property ZERO
      * @type {Number}
-     * @readonly
      */
     ZERO: 0,
 
     /**
      * @property SRC_ALPHA
      * @type {Number}
-     * @readonly
      */
     SRC_ALPHA: 0x0302,
 
     /**
      * @property SRC_ALPHA_SATURATE
      * @type {Number}
-     * @readonly
      */
     SRC_ALPHA_SATURATE: 0x308,
 
     /**
      * @property SRC_COLOR
      * @type {Number}
-     * @readonly
      */
     SRC_COLOR: 0x300,
 
     /**
      * @property DST_ALPHA
      * @type {Number}
-     * @readonly
      */
     DST_ALPHA: 0x304,
 
     /**
      * @property DST_COLOR
      * @type {Number}
-     * @readonly
      */
     DST_COLOR: 0x306,
 
     /**
      * @property ONE_MINUS_SRC_ALPHA
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_SRC_ALPHA: 0x0303,
 
     /**
      * @property ONE_MINUS_SRC_COLOR
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_SRC_COLOR: 0x301,
 
     /**
      * @property ONE_MINUS_DST_ALPHA
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_DST_ALPHA: 0x305,
 
     /**
      * @property ONE_MINUS_DST_COLOR
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_DST_COLOR: 0x0307,
 
     /**
      * @property ONE_MINUS_CONSTANT_ALPHA
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_CONSTANT_ALPHA: 0x8004,
 
     /**
      * @property ONE_MINUS_CONSTANT_COLOR
      * @type {Number}
-     * @readonly
      */
     ONE_MINUS_CONSTANT_COLOR: 0x8002,
 
-    /**
-     * the constant variable equals gl.LINEAR for texture
-     * @property LINEAR
-     * @type {Number}
-     * @readonly
-     */
-    LINEAR: 0x2601,
-
-    /**
-     * default gl blend dst function. Compatible with premultiplied alpha images.
-     * @property BLEND_DST
-     * @type {Number}
-     * @readonly
-     */
-    BLEND_DST: 0x0303,
-
-
     //Possible device orientations
-
-    /**
-     * Device oriented vertically, home button on the bottom (UIDeviceOrientationPortrait)
-     * @property WEB_ORIENTATION_PORTRAIT
-     * @type {Number}
-     * @readonly
-     */
-    WEB_ORIENTATION_PORTRAIT: 0,
-
-    /**
-     * Device oriented horizontally, home button on the right (UIDeviceOrientationLandscapeLeft)
-     * @property WEB_ORIENTATION_LANDSCAPE_LEFT
-     * @type {Number}
-     * @readonly
-     */
-    WEB_ORIENTATION_LANDSCAPE_LEFT: -90,
-
-    /**
-     * Device oriented vertically, home button on the top (UIDeviceOrientationPortraitUpsideDown)
-     * @property WEB_ORIENTATION_PORTRAIT_UPSIDE_DOWN
-     * @type {Number}
-     * @readonly
-     */
-    WEB_ORIENTATION_PORTRAIT_UPSIDE_DOWN: 180,
-
-    /**
-     * Device oriented horizontally, home button on the left (UIDeviceOrientationLandscapeRight)
-     * @property WEB_ORIENTATION_LANDSCAPE_RIGHT
-     * @type {Number}
-     * @readonly
-     */
-    WEB_ORIENTATION_LANDSCAPE_RIGHT: 90,
-
     /**
      * Oriented vertically
      * @property ORIENTATION_PORTRAIT
      * @type {Number}
-     * @readonly
      */
     ORIENTATION_PORTRAIT: 1,
 
@@ -1071,7 +164,6 @@ cc.macro = {
      * Oriented horizontally
      * @property ORIENTATION_LANDSCAPE
      * @type {Number}
-     * @readonly
      */
     ORIENTATION_LANDSCAPE: 2,
 
@@ -1079,313 +171,16 @@ cc.macro = {
      * Oriented automatically
      * @property ORIENTATION_AUTO
      * @type {Number}
-     * @readonly
      */
     ORIENTATION_AUTO: 3,
-
 
     DENSITYDPI_DEVICE: 'device-dpi',
     DENSITYDPI_HIGH: 'high-dpi',
     DENSITYDPI_MEDIUM: 'medium-dpi',
     DENSITYDPI_LOW: 'low-dpi',
 
-
-    // ------------------- vertex attrib flags -----------------------------
-    /**
-     * @property VERTEX_ATTRIB_FLAG_NONE
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_FLAG_NONE: 0,
-    /**
-     * @property VERTEX_ATTRIB_FLAG_POSITION
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_FLAG_POSITION: 1 << 0,
-    /**
-     * @property VERTEX_ATTRIB_FLAG_COLOR
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_FLAG_COLOR: 1 << 1,
-    /**
-     * @property VERTEX_ATTRIB_FLAG_TEX_COORDS
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_FLAG_TEX_COORDS: 1 << 2,
-    /**
-     * @property VERTEX_ATTRIB_FLAG_POS_COLOR_TEX
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_FLAG_POS_COLOR_TEX: ( (1 << 0) | (1 << 1) | (1 << 2) ),
-
-    /**
-     * GL server side states
-     * @property GL_ALL
-     * @type {Number}
-     * @readonly
-     */
-    GL_ALL: 0,
-
-    //-------------Vertex Attributes-----------
-    /**
-     * @property VERTEX_ATTRIB_POSITION
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_POSITION: 0,
-    /**
-     * @property VERTEX_ATTRIB_COLOR
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_COLOR: 1,
-    /**
-     * @property VERTEX_ATTRIB_TEX_COORDS
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_TEX_COORDS: 2,
-    /**
-     * @property VERTEX_ATTRIB_MAX
-     * @type {Number}
-     * @readonly
-     */
-    VERTEX_ATTRIB_MAX: 3,
-
-    //------------Uniforms------------------
-    /**
-     * @property UNIFORM_PMATRIX
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_PMATRIX: 0,
-    /**
-     * @property UNIFORM_MVMATRIX
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_MVMATRIX: 1,
-    /**
-     * @property UNIFORM_MVPMATRIX
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_MVPMATRIX: 2,
-    /**
-     * @property UNIFORM_TIME
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_TIME: 3,
-    /**
-     * @property UNIFORM_SINTIME
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_SINTIME: 4,
-    /**
-     * @property UNIFORM_COSTIME
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_COSTIME: 5,
-    /**
-     * @property UNIFORM_RANDOM01
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_RANDOM01: 6,
-    /**
-     * @property UNIFORM_SAMPLER
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_SAMPLER: 7,
-    /**
-     * @property UNIFORM_MAX
-     * @type {Number}
-     * @readonly
-     */
-    UNIFORM_MAX: 8,
-
-    //------------Shader Name---------------
-    /**
-     * @property SHADER_POSITION_TEXTURECOLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_TEXTURECOLOR: "ShaderPositionTextureColor",
-    /**
-     * @property SHADER_POSITION_TEXTURECOLORALPHATEST
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_TEXTURECOLORALPHATEST: "ShaderPositionTextureColorAlphaTest",
-    /**
-     * @property SHADER_POSITION_COLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_COLOR: "ShaderPositionColor",
-    /**
-     * @property SHADER_POSITION_TEXTURE
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_TEXTURE: "ShaderPositionTexture",
-    /**
-     * @property SHADER_POSITION_TEXTURE_UCOLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_TEXTURE_UCOLOR: "ShaderPositionTexture_uColor",
-    /**
-     * @property SHADER_POSITION_TEXTUREA8COLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_TEXTUREA8COLOR: "ShaderPositionTextureA8Color",
-    /**
-     * @property SHADER_POSITION_UCOLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_UCOLOR: "ShaderPosition_uColor",
-    /**
-     * @property SHADER_POSITION_LENGTHTEXTURECOLOR
-     * @type {String}
-     * @readonly
-     */
-    SHADER_POSITION_LENGTHTEXTURECOLOR: "ShaderPositionLengthTextureColor",
-
-    //------------uniform names----------------
-    /**
-     * @property UNIFORM_PMATRIX_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_PMATRIX_S: "CC_PMatrix",
-    /**
-     * @property UNIFORM_MVMATRIX_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_MVMATRIX_S: "CC_MVMatrix",
-    /**
-     * @property UNIFORM_MVPMATRIX_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_MVPMATRIX_S: "CC_MVPMatrix",
-    /**
-     * @property UNIFORM_TIME_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_TIME_S: "CC_Time",
-    /**
-     * @property UNIFORM_SINTIME_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_SINTIME_S: "CC_SinTime",
-    /**
-     * @property UNIFORM_COSTIME_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_COSTIME_S: "CC_CosTime",
-    /**
-     * @property UNIFORM_RANDOM01_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_RANDOM01_S: "CC_Random01",
-    /**
-     * @property UNIFORM_SAMPLER_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_SAMPLER_S: "CC_Texture0",
-    /**
-     * @property UNIFORM_ALPHA_TEST_VALUE_S
-     * @type {String}
-     * @readonly
-     */
-    UNIFORM_ALPHA_TEST_VALUE_S: "CC_alpha_value",
-
-    //------------Attribute names--------------
-    /**
-     * @property ATTRIBUTE_NAME_COLOR
-     * @type {String}
-     * @readonly
-     */
-    ATTRIBUTE_NAME_COLOR: "a_color",
-    /**
-     * @property ATTRIBUTE_NAME_POSITION
-     * @type {String}
-     * @readonly
-     */
-    ATTRIBUTE_NAME_POSITION: "a_position",
-    /**
-     * @property ATTRIBUTE_NAME_TEX_COORD
-     * @type {String}
-     * @readonly
-     */
-    ATTRIBUTE_NAME_TEX_COORD: "a_texCoord",
-
-
-    /**
-     * default size for font size
-     * @property ITEM_SIZE
-     * @type {Number}
-     * @readonly
-     */
-    ITEM_SIZE: 32,
-
-    /**
-     * default tag for current item
-     * @property CURRENT_ITEM
-     * @type {Number}
-     * @readonly
-     */
-    CURRENT_ITEM: 0xc0c05001,
-    /**
-     * default tag for zoom action tag
-     * @property ZOOM_ACTION_TAG
-     * @type {Number}
-     * @readonly
-     */
-    ZOOM_ACTION_TAG: 0xc0c05002,
-    /**
-     * default tag for normal
-     * @property NORMAL_TAG
-     * @type {Number}
-     * @readonly
-     */
-    NORMAL_TAG: 8801,
-
-    /**
-     * default selected tag
-     * @property SELECTED_TAG
-     * @type {Number}
-     * @readonly
-     */
-    SELECTED_TAG: 8802,
-
-    /**
-     * default disabled tag
-     * @property DISABLE_TAG
-     * @type {Number}
-     * @readonly
-     */
-    DISABLE_TAG: 8803,
-
     // General configurations
+
     /**
      * <p>
      *   If enabled, the texture coordinates will be calculated by using this formula: <br/>
@@ -1395,190 +190,25 @@ cc.macro = {
      *  The same for bottom and top.                                                   <br/>
      *                                                                                 <br/>
      *  This formula prevents artifacts by using 99% of the texture.                   <br/>
-     *  The "correct" way to prevent artifacts is by using the spritesheet-artifact-fixer.py or a similar tool.<br/>
+     *  The "correct" way to prevent artifacts is by expand the texture's border with the same color by 1 pixel<br/>
      *                                                                                  <br/>
-     *  Affected nodes:                                                                 <br/>
-     *      - _ccsg.Sprite / cc.SpriteBatchNode and subclasses: cc.LabelBMFont, _ccsg.TMXTiledMap <br/>
-     *      - cc.LabelAtlas                                                              <br/>
-     *      - cc.QuadParticleSystem                                                      <br/>
-     *      - cc.TileMap                                                                 <br/>
+     *  Affected component:                                                                 <br/>
+     *      - cc.TMXLayer                                                       <br/>
      *                                                                                  <br/>
-     *  To enabled set it to 1. Disabled by default.<br/>
+     *  Enabled by default. To disabled set it to 0. <br/>
      *  To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
      * </p>
      *
-     * @property {Number} FIX_ARTIFACTS_BY_STRECHING_TEXEL
-     * @readonly
+     * @property {Number} FIX_ARTIFACTS_BY_STRECHING_TEXEL_TMX
      */
-    FIX_ARTIFACTS_BY_STRECHING_TEXEL: 1,
+    FIX_ARTIFACTS_BY_STRECHING_TEXEL_TMX: true,
 
     /**
      * Position of the FPS (Default: 0,0 (bottom-left corner))<br/>
      * To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
      * @property {Vec2} DIRECTOR_STATS_POSITION
-     * @readonly
      */
-    DIRECTOR_STATS_POSITION: cc.p(0, 0),
-
-    /**
-     * <p>
-     *   Seconds between FPS updates.<br/>
-     *   0.5 seconds, means that the FPS number will be updated every 0.5 seconds.<br/>
-     *   Having a bigger number means a more reliable FPS<br/>
-     *   <br/>
-     *   Default value: 0.1f<br/>
-     *   To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} DIRECTOR_FPS_INTERVAL
-     * @readonly
-     */
-    DIRECTOR_FPS_INTERVAL: 0.5,
-
-    /**
-     * <p>
-     *    If enabled, the ccsg.Node objects (_ccsg.Sprite, _ccsg.Label,etc) will be able to render in subpixels.<br/>
-     *    If disabled, integer pixels will be used.<br/>
-     *    <br/>
-     *    To enable set it to 1. Enabled by default.<br/>
-     *    To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} COCOSNODE_RENDER_SUBPIXEL
-     * @readonly
-     */
-    COCOSNODE_RENDER_SUBPIXEL: 1,
-
-    /**
-     * <p>
-     *   If enabled, the _ccsg.Sprite objects rendered with cc.SpriteBatchNode will be able to render in subpixels.<br/>
-     *   If disabled, integer pixels will be used.<br/>
-     *   <br/>
-     *   To enable set it to 1. Enabled by default.<br/>
-     *   To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} SPRITEBATCHNODE_RENDER_SUBPIXEL
-     * @readonly
-     */
-    SPRITEBATCHNODE_RENDER_SUBPIXEL: 1,
-
-    /**
-     * <p>
-     *     Automatically premultiply alpha for PNG resources
-     * </p>
-     * @property {Number} AUTO_PREMULTIPLIED_ALPHA_FOR_PNG
-     * @readonly
-     */
-    AUTO_PREMULTIPLIED_ALPHA_FOR_PNG: 0,
-
-    /**
-     * <p>
-     *     If most of your images have pre-multiplied alpha, set it to 1 (if you are going to use .PNG/.JPG file images).<br/>
-     *     Only set to 0 if ALL your images by-pass Apple UIImage loading system (eg: if you use libpng or PVR images)<br/>
-     *     <br/>
-     *     To enable set it to a value different than 0. Enabled by default.<br/>
-     *     To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} OPTIMIZE_BLEND_FUNC_FOR_PREMULTIPLIED_ALPHA
-     * @readonly
-     */
-    OPTIMIZE_BLEND_FUNC_FOR_PREMULTIPLIED_ALPHA: 0,
-
-    /**
-     * <p>
-     *   Use GL_TRIANGLE_STRIP instead of GL_TRIANGLES when rendering the texture atlas.<br/>
-     *   It seems it is the recommend way, but it is much slower, so, enable it at your own risk<br/>
-     *   <br/>
-     *   To enable set it to a value different than 0. Disabled by default.<br/>
-     *   To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} TEXTURE_ATLAS_USE_TRIANGLE_STRIP
-     * @readonly
-     */
-    TEXTURE_ATLAS_USE_TRIANGLE_STRIP: 0,
-
-    /**
-     * <p>
-     *    By default, cc.TextureAtlas (used by many cocos2d classes) will use VAO (Vertex Array Objects).<br/>
-     *    Apple recommends its usage but they might consume a lot of memory, specially if you use many of them.<br/>
-     *    So for certain cases, where you might need hundreds of VAO objects, it might be a good idea to disable it.<br/>
-     *    <br/>
-     *    To disable it set it to 0. disable by default.(Not Supported on WebGL)<br/>
-     *    To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @property {Number} TEXTURE_ATLAS_USE_VAO
-     * @readonly
-     */
-    TEXTURE_ATLAS_USE_VAO: 0,
-
-    /**
-     * <p>
-     *  If enabled, NPOT textures will be used where available. Only 3rd gen (and newer) devices support NPOT textures.<br/>
-     *  NPOT textures have the following limitations:<br/>
-     *     - They can't have mipmaps<br/>
-     *     - They only accept GL_CLAMP_TO_EDGE in GL_TEXTURE_WRAP_{S,T}<br/>
-     *  <br/>
-     *  To enable set it to a value different than 0. Disabled by default. <br/>
-     *  <br/>
-     *  This value governs only the PNG, GIF, BMP, images.<br/>
-     *  This value DOES NOT govern the PVR (PVR.GZ, PVR.CCZ) files. If NPOT PVR is loaded, then it will create an NPOT texture ignoring this value.<br/>
-     *  To modify it, in Web engine please refer to CCMacro.js, in JSB please refer to CCConfig.h
-     * </p>
-     * @readonly
-     * @type {Number}
-     * @deprecated This value will be removed in 1.1 and NPOT textures will be loaded by default if the device supports it.
-     */
-    TEXTURE_NPOT_SUPPORT: 0,
-
-    /**
-     * <p>
-     *     If enabled, it will use LA88 (Luminance Alpha 16-bit textures) for CCLabelTTF objects. <br/>
-     *     If it is disabled, it will use A8 (Alpha 8-bit textures).                              <br/>
-     *     LA88 textures are 6% faster than A8 textures, but they will consume 2x memory.         <br/>
-     *                                                                                            <br/>
-     *     This feature is enabled by default.
-     * </p>
-     * @property {Number} USE_LA88_LABELS
-     * @readonly
-     */
-    USE_LA88_LABELS: 1,
-
-    /**
-     * <p>
-     *   If enabled, all subclasses of _ccsg.Sprite will draw a bounding box<br/>
-     *   Useful for debugging purposes only. It is recommend to leave it disabled.<br/>
-     *   <br/>
-     *   To enable set it to a value different than 0. Disabled by default:<br/>
-     *      0 -- disabled<br/>
-     *      1 -- draw bounding box<br/>
-     *      2 -- draw texture box
-     * </p>
-     * @property {Number} SPRITE_DEBUG_DRAW
-     * @readonly
-     */
-    SPRITE_DEBUG_DRAW: 0,
-
-    /**
-     * <p>
-     *   If enabled, all subclasses of cc.LabelBMFont will draw a bounding box <br/>
-     *   Useful for debugging purposes only. It is recommend to leave it disabled.<br/>
-     *   <br/>
-     *   To enable set it to a value different than 0. Disabled by default.<br/>
-     * </p>
-     * @property {Number} LABELBMFONT_DEBUG_DRAW
-     * @readonly
-     */
-    LABELBMFONT_DEBUG_DRAW: 0,
-
-    /**
-     * <p>
-     *    If enabled, all subclasses of cc.LabelAtlas will draw a bounding box<br/>
-     *    Useful for debugging purposes only. It is recommend to leave it disabled.<br/>
-     *    <br/>
-     *    To enable set it to a value different than 0. Disabled by default.
-     * </p>
-     * @property {Number} LABELATLAS_DEBUG_DRAW
-     * @readonly
-     */
-    LABELATLAS_DEBUG_DRAW: 0,
+    DIRECTOR_STATS_POSITION: cc.v2(0, 0),
 
     /**
      * <p>
@@ -1587,176 +217,1355 @@ cc.macro = {
      *    If disabled, only the last run action will take effect.
      * </p>
      * @property {Number} ENABLE_STACKABLE_ACTIONS
-     * @readonly
      */
-    ENABLE_STACKABLE_ACTIONS: 1,
+    ENABLE_STACKABLE_ACTIONS: true,
 
     /**
-     * <p>
-     *      If enabled, cocos2d will maintain an OpenGL state cache internally to avoid unnecessary switches.                                     <br/>
-     *      In order to use them, you have to use the following functions, instead of the the GL ones:                                             <br/>
-     *          - cc.gl.useProgram() instead of glUseProgram()                                                                                      <br/>
-     *          - cc.gl.deleteProgram() instead of glDeleteProgram()                                                                                <br/>
-     *          - cc.gl.blendFunc() instead of glBlendFunc()                                                                                        <br/>
-     *                                                                                                                                            <br/>
-     *      If this functionality is disabled, then cc.gl.useProgram(), cc.gl.deleteProgram(), cc.gl.blendFunc() will call the GL ones, without using the cache.              <br/>
-     *      It is recommend to enable whenever possible to improve speed.                                                                        <br/>
-     *      If you are migrating your code from GL ES 1.1, then keep it disabled. Once all your code works as expected, turn it on.
-     * </p>
-     * @property {Number} ENABLE_GL_STATE_CACHE
+     * !#en 
+     * The timeout to determine whether a touch is no longer active and should be removed.
+     * The reason to add this timeout is due to an issue in X5 browser core, 
+     * when X5 is presented in wechat on Android, if a touch is glissed from the bottom up, and leave the page area,
+     * no touch cancel event is triggered, and the touch will be considered active forever. 
+     * After multiple times of this action, our maximum touches number will be reached and all new touches will be ignored.
+     * So this new mechanism can remove the touch that should be inactive if it's not updated during the last 5000 milliseconds.
+     * Though it might remove a real touch if it's just not moving for the last 5 seconds which is not easy with the sensibility of mobile touch screen.
+     * You can modify this value to have a better behavior if you find it's not enough.
+     * !#zh
+     * 用于甄别一个触点对象是否已经失效并且可以被移除的延时时长
+     * 添加这个时长的原因是 X5 内核在微信浏览器中出现的一个 bug。
+     * 在这个环境下，如果用户将一个触点从底向上移出页面区域，将不会触发任何 touch cancel 或 touch end 事件，而这个触点会被永远当作停留在页面上的有效触点。
+     * 重复这样操作几次之后，屏幕上的触点数量将达到我们的事件系统所支持的最高触点数量，之后所有的触摸事件都将被忽略。
+     * 所以这个新的机制可以在触点在一定时间内没有任何更新的情况下视为失效触点并从事件系统中移除。
+     * 当然，这也可能移除一个真实的触点，如果用户的触点真的在一定时间段内完全没有移动（这在当前手机屏幕的灵敏度下会很难）。
+     * 你可以修改这个值来获得你需要的效果，默认值是 5000 毫秒。
+     * @property {Number} TOUCH_TIMEOUT
+     */
+    TOUCH_TIMEOUT: 5000,
+
+    /**
+     * !#en 
+     * The maximum vertex count for a single batched draw call.
+     * !#zh
+     * 最大可以被单次批处理渲染的顶点数量。
+     * @property {Number} BATCH_VERTEX_COUNT
+     */
+    BATCH_VERTEX_COUNT: 20000,
+
+    /**
+     * !#en 
+     * Whether or not enabled tiled map auto culling. If you set the TiledMap skew or rotation, then need to manually disable this, otherwise, the rendering will be wrong.
+     * !#zh
+     * 是否开启瓦片地图的自动裁减功能。瓦片地图如果设置了 skew, rotation 的话，需要手动关闭，否则渲染会出错。
+     * @property {Boolean} ENABLE_TILEDMAP_CULLING
+     * @default true
+     */
+    ENABLE_TILEDMAP_CULLING: true,
+
+    /**
+     * !#en 
+     * The max concurrent task number for the downloader
+     * !#zh
+     * 下载任务的最大并发数限制，在安卓平台部分机型或版本上可能需要限制在较低的水平
+     * @property {Number} DOWNLOAD_MAX_CONCURRENT
+     * @default 64
+     */
+    DOWNLOAD_MAX_CONCURRENT: 64,
+
+    /**
+     * !#en 
+     * Boolean that indicates if the canvas contains an alpha channel, default sets to false for better performance.
+     * Though if you want to make your canvas background transparent and show other dom elements at the background, 
+     * you can set it to true before `cc.game.run`.
+     * Web only.
+     * !#zh
+     * 用于设置 Canvas 背景是否支持 alpha 通道，默认为 false，这样可以有更高的性能表现。
+     * 如果你希望 Canvas 背景是透明的，并显示背后的其他 DOM 元素，你可以在 `cc.game.run` 之前将这个值设为 true。
+     * 仅支持 Web
+     * @property {Boolean} ENABLE_TRANSPARENT_CANVAS
+     * @default false
+     */
+    ENABLE_TRANSPARENT_CANVAS: false,
+
+    /**
+     * !#en
+     * Boolean that indicates if the WebGL context is created with `antialias` option turned on, default value is false.
+     * Set it to true could make your game graphics slightly smoother, like texture hard edges when rotated.
+     * Whether to use this really depend on your game design and targeted platform, 
+     * device with retina display usually have good detail on graphics with or without this option, 
+     * you probably don't want antialias if your game style is pixel art based.
+     * Also, it could have great performance impact with some browser / device using software MSAA.
+     * You can set it to true before `cc.game.run`.
+     * Web only.
+     * !#zh
+     * 用于设置在创建 WebGL Context 时是否开启抗锯齿选项，默认值是 false。
+     * 将这个选项设置为 true 会让你的游戏画面稍稍平滑一些，比如旋转硬边贴图时的锯齿。是否开启这个选项很大程度上取决于你的游戏和面向的平台。
+     * 在大多数拥有 retina 级别屏幕的设备上用户往往无法区分这个选项带来的变化；如果你的游戏选择像素艺术风格，你也多半不会想开启这个选项。
+     * 同时，在少部分使用软件级别抗锯齿算法的设备或浏览器上，这个选项会对性能产生比较大的影响。
+     * 你可以在 `cc.game.run` 之前设置这个值，否则它不会生效。
+     * 仅支持 Web
+     * @property {Boolean} ENABLE_WEBGL_ANTIALIAS
+     * @default false
+     */
+    ENABLE_WEBGL_ANTIALIAS: false,
+
+    /**
+     * !#en
+     * Whether or not enable auto culling.
+     * This feature have been removed in v2.0 new renderer due to overall performance consumption.
+     * We have no plan currently to re-enable auto culling.
+     * If your game have more dynamic objects, we suggest to disable auto culling.
+     * If your game have more static objects, we suggest to enable auto culling.
+     * !#zh
+     * 是否开启自动裁减功能，开启裁减功能将会把在屏幕外的物体从渲染队列中去除掉。
+     * 这个功能在 v2.0 的新渲染器中被移除了，因为它在大多数游戏中所带来的损耗要高于性能的提升，目前我们没有计划重新支持自动裁剪。
+     * 如果游戏中的动态物体比较多的话，建议将此选项关闭。
+     * 如果游戏中的静态物体比较多的话，建议将此选项打开。
+     * @property {Boolean} ENABLE_CULLING
+     * @deprecated since v2.0
+     * @default false
+     */
+    ENABLE_CULLING: false,
+
+    /**
+     * !#en
+     * Whether or not clear dom Image object cache after uploading to gl texture.
+     * Concretely, we are setting image.src to empty string to release the cache.
+     * Normally you don't need to enable this option, because on web the Image object doesn't consume too much memory.
+     * But on Wechat Game platform, the current version cache decoded data in Image object, which has high memory usage.
+     * So we enabled this option by default on Wechat, so that we can release Image cache immediately after uploaded to GPU.
+     * !#zh
+     * 是否在将贴图上传至 GPU 之后删除 DOM Image 缓存。
+     * 具体来说，我们通过设置 image.src 为空字符串来释放这部分内存。
+     * 正常情况下，你不需要开启这个选项，因为在 web 平台，Image 对象所占用的内存很小。
+     * 但是在微信小游戏平台的当前版本，Image 对象会缓存解码后的图片数据，它所占用的内存空间很大。
+     * 所以我们在微信平台默认开启了这个选项，这样我们就可以在上传 GL 贴图之后立即释放 Image 对象的内存，避免过高的内存占用。
+     * @property {Boolean} CLEANUP_IMAGE_CACHE
+     * @default false
+     */
+    CLEANUP_IMAGE_CACHE: false,
+
+    /**
+     * !#en
+     * Whether or not show mesh wire frame.
+     * !#zh
+     * 是否显示网格的线框。
+     * @property {Boolean} SHOW_MESH_WIREFRAME
+     * @default false
+     */
+    SHOW_MESH_WIREFRAME: false,
+};
+
+
+let SUPPORT_TEXTURE_FORMATS = ['.webp', '.jpg', '.jpeg', '.bmp', '.png'];
+if (cc.sys.isMobile) {
+    if (cc.sys.os === cc.sys.OS_IOS) {
+        SUPPORT_TEXTURE_FORMATS = ['.pvr'].concat(SUPPORT_TEXTURE_FORMATS);
+    }
+    // else if (cc.sys.os === cc.sys.OS_ANDROID) {
+    //     SUPPORT_TEXTURE_FORMATS = ['.etc'].join(SUPPORT_TEXTURE_FORMATS);
+    // }
+}
+
+/**
+ * !en
+ * The image format supported by the engine defaults, and the supported formats may differ in different build platforms and device types.
+ * Currently all platform and device support ['.webp', '.jpg', '.jpeg', '.bmp', '.png'], The iOS mobile platform also supports the PVR format。
+ * !zh
+ * 引擎默认支持的图片格式，支持的格式可能在不同的构建平台和设备类型上有所差别。
+ * 目前所有平台和设备支持的格式有 ['.webp', '.jpg', '.jpeg', '.bmp', '.png']. 另外 Ios 手机平台还额外支持了 PVR 格式。
+ * @property {[String]} SUPPORT_TEXTURE_FORMATS
+ */
+cc.macro.SUPPORT_TEXTURE_FORMATS = SUPPORT_TEXTURE_FORMATS;
+
+
+/**
+ * !#en Key map for keyboard event
+ * !#zh 键盘事件的按键值
+ * @enum macro.KEY
+ * @example {@link cocos2d/core/platform/CCCommon/KEY.js}
+ */
+cc.macro.KEY = {
+    /**
+     * !#en None
+     * !#zh 没有分配
+     * @property none
+     * @type {Number}
      * @readonly
      */
-    ENABLE_GL_STATE_CACHE: 1
+    none:0,
+
+    // android
+    /**
+     * !#en The back key
+     * !#zh 返回键
+     * @property back
+     * @type {Number}
+     * @readonly
+     */
+    back:6,
+    /**
+     * !#en The menu key
+     * !#zh 菜单键
+     * @property menu
+     * @type {Number}
+     * @readonly
+     */
+    menu:18,
+
+    /**
+     * !#en The backspace key
+     * !#zh 退格键
+     * @property backspace
+     * @type {Number}
+     * @readonly
+     */
+    backspace:8,
+
+    /**
+     * !#en The tab key
+     * !#zh Tab 键
+     * @property tab
+     * @type {Number}
+     * @readonly
+     */
+    tab:9,
+
+    /**
+     * !#en The enter key
+     * !#zh 回车键
+     * @property enter
+     * @type {Number}
+     * @readonly
+     */
+    enter:13,
+
+    /**
+     * !#en The shift key
+     * !#zh Shift 键
+     * @property shift
+     * @type {Number}
+     * @readonly
+     */
+    shift:16, //should use shiftkey instead
+
+    /**
+     * !#en The ctrl key
+     * !#zh Ctrl 键
+     * @property ctrl
+     * @type {Number}
+     * @readonly
+     */
+    ctrl:17, //should use ctrlkey
+
+    /**
+     * !#en The alt key
+     * !#zh Alt 键
+     * @property alt
+     * @type {Number}
+     * @readonly
+     */
+    alt:18, //should use altkey
+
+    /**
+     * !#en The pause key
+     * !#zh 暂停键
+     * @property pause
+     * @type {Number}
+     * @readonly
+     */
+    pause:19,
+
+    /**
+     * !#en The caps lock key
+     * !#zh 大写锁定键
+     * @property capslock
+     * @type {Number}
+     * @readonly
+     */
+    capslock:20,
+
+    /**
+     * !#en The esc key
+     * !#zh ESC 键
+     * @property escape
+     * @type {Number}
+     * @readonly
+     */
+    escape:27,
+
+    /**
+     * !#en The space key
+     * !#zh 空格键
+     * @property space
+     * @type {Number}
+     * @readonly
+     */
+    space:32,
+
+    /**
+     * !#en The page up key
+     * !#zh 向上翻页键
+     * @property pageup
+     * @type {Number}
+     * @readonly
+     */
+    pageup:33,
+
+    /**
+     * !#en The page down key
+     * !#zh 向下翻页键
+     * @property pagedown
+     * @type {Number}
+     * @readonly
+     */
+    pagedown:34,
+
+    /**
+     * !#en The end key
+     * !#zh 结束键
+     * @property end
+     * @type {Number}
+     * @readonly
+     */
+    end:35,
+
+    /**
+     * !#en The home key
+     * !#zh 主菜单键
+     * @property home
+     * @type {Number}
+     * @readonly
+     */
+    home:36,
+
+    /**
+     * !#en The left key
+     * !#zh 向左箭头键
+     * @property left
+     * @type {Number}
+     * @readonly
+     */
+    left:37,
+
+    /**
+     * !#en The up key
+     * !#zh 向上箭头键
+     * @property up
+     * @type {Number}
+     * @readonly
+     */
+    up:38,
+
+    /**
+     * !#en The right key
+     * !#zh 向右箭头键
+     * @property right
+     * @type {Number}
+     * @readonly
+     */
+    right:39,
+
+    /**
+     * !#en The down key
+     * !#zh 向下箭头键
+     * @property down
+     * @type {Number}
+     * @readonly
+     */
+    down:40,
+
+    /**
+     * !#en The select key
+     * !#zh Select 键
+     * @property select
+     * @type {Number}
+     * @readonly
+     */
+    select:41,
+
+    /**
+     * !#en The insert key
+     * !#zh 插入键
+     * @property insert
+     * @type {Number}
+     * @readonly
+     */
+    insert:45,
+
+    /**
+     * !#en The Delete key
+     * !#zh 删除键
+     * @property Delete
+     * @type {Number}
+     * @readonly
+     */
+    Delete:46,
+
+    /**
+     * !#en The '0' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 0 键
+     * @property 0
+     * @type {Number}
+     * @readonly
+     */
+    0:48,
+
+    /**
+     * !#en The '1' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 1 键
+     * @property 1
+     * @type {Number}
+     * @readonly
+     */
+    1:49,
+
+    /**
+     * !#en The '2' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 2 键
+     * @property 2
+     * @type {Number}
+     * @readonly
+     */
+    2:50,
+
+    /**
+     * !#en The '3' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 3 键
+     * @property 3
+     * @type {Number}
+     * @readonly
+     */
+    3:51,
+
+    /**
+     * !#en The '4' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 4 键
+     * @property 4
+     * @type {Number}
+     * @readonly
+     */
+    4:52,
+
+    /**
+     * !#en The '5' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 5 键
+     * @property 5
+     * @type {Number}
+     * @readonly
+     */
+    5:53,
+
+    /**
+     * !#en The '6' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 6 键
+     * @property 6
+     * @type {Number}
+     * @readonly
+     */
+    6:54,
+
+    /**
+     * !#en The '7' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 7 键
+     * @property 7
+     * @type {Number}
+     * @readonly
+     */
+    7:55,
+
+    /**
+     * !#en The '8' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 8 键
+     * @property 8
+     * @type {Number}
+     * @readonly
+     */
+    8:56,
+
+    /**
+     * !#en The '9' key on the top of the alphanumeric keyboard.
+     * !#zh 字母键盘上的 9 键
+     * @property 9
+     * @type {Number}
+     * @readonly
+     */
+    9:57,
+
+    /**
+     * !#en The a key
+     * !#zh A 键
+     * @property a
+     * @type {Number}
+     * @readonly
+     */
+    a:65,
+
+    /**
+     * !#en The b key
+     * !#zh B 键
+     * @property b
+     * @type {Number}
+     * @readonly
+     */
+    b:66,
+
+    /**
+     * !#en The c key
+     * !#zh C 键
+     * @property c
+     * @type {Number}
+     * @readonly
+     */
+    c:67,
+
+    /**
+     * !#en The d key
+     * !#zh D 键
+     * @property d
+     * @type {Number}
+     * @readonly
+     */
+    d:68,
+
+    /**
+     * !#en The e key
+     * !#zh E 键
+     * @property e
+     * @type {Number}
+     * @readonly
+     */
+    e:69,
+
+    /**
+     * !#en The f key
+     * !#zh F 键
+     * @property f
+     * @type {Number}
+     * @readonly
+     */
+    f:70,
+
+    /**
+     * !#en The g key
+     * !#zh G 键
+     * @property g
+     * @type {Number}
+     * @readonly
+     */
+    g:71,
+
+    /**
+     * !#en The h key
+     * !#zh H 键
+     * @property h
+     * @type {Number}
+     * @readonly
+     */
+    h:72,
+
+    /**
+     * !#en The i key
+     * !#zh I 键
+     * @property i
+     * @type {Number}
+     * @readonly
+     */
+    i:73,
+
+    /**
+     * !#en The j key
+     * !#zh J 键
+     * @property j
+     * @type {Number}
+     * @readonly
+     */
+    j:74,
+
+    /**
+     * !#en The k key
+     * !#zh K 键
+     * @property k
+     * @type {Number}
+     * @readonly
+     */
+    k:75,
+
+    /**
+     * !#en The l key
+     * !#zh L 键
+     * @property l
+     * @type {Number}
+     * @readonly
+     */
+    l:76,
+
+    /**
+     * !#en The m key
+     * !#zh M 键
+     * @property m
+     * @type {Number}
+     * @readonly
+     */
+    m:77,
+
+    /**
+     * !#en The n key
+     * !#zh N 键
+     * @property n
+     * @type {Number}
+     * @readonly
+     */
+    n:78,
+
+    /**
+     * !#en The o key
+     * !#zh O 键
+     * @property o
+     * @type {Number}
+     * @readonly
+     */
+    o:79,
+
+    /**
+     * !#en The p key
+     * !#zh P 键
+     * @property p
+     * @type {Number}
+     * @readonly
+     */
+    p:80,
+
+    /**
+     * !#en The q key
+     * !#zh Q 键
+     * @property q
+     * @type {Number}
+     * @readonly
+     */
+    q:81,
+
+    /**
+     * !#en The r key
+     * !#zh R 键
+     * @property r
+     * @type {Number}
+     * @readonly
+     */
+    r:82,
+
+    /**
+     * !#en The s key
+     * !#zh S 键
+     * @property s
+     * @type {Number}
+     * @readonly
+     */
+    s:83,
+
+    /**
+     * !#en The t key
+     * !#zh T 键
+     * @property t
+     * @type {Number}
+     * @readonly
+     */
+    t:84,
+
+    /**
+     * !#en The u key
+     * !#zh U 键
+     * @property u
+     * @type {Number}
+     * @readonly
+     */
+    u:85,
+
+    /**
+     * !#en The v key
+     * !#zh V 键
+     * @property v
+     * @type {Number}
+     * @readonly
+     */
+    v:86,
+
+    /**
+     * !#en The w key
+     * !#zh W 键
+     * @property w
+     * @type {Number}
+     * @readonly
+     */
+    w:87,
+
+    /**
+     * !#en The x key
+     * !#zh X 键
+     * @property x
+     * @type {Number}
+     * @readonly
+     */
+    x:88,
+
+    /**
+     * !#en The y key
+     * !#zh Y 键
+     * @property y
+     * @type {Number}
+     * @readonly
+     */
+    y:89,
+
+    /**
+     * !#en The z key
+     * !#zh Z 键
+     * @property z
+     * @type {Number}
+     * @readonly
+     */
+    z:90,
+
+    /**
+     * !#en The numeric keypad 0
+     * !#zh 数字键盘 0
+     * @property num0
+     * @type {Number}
+     * @readonly
+     */
+    num0:96,
+
+    /**
+     * !#en The numeric keypad 1
+     * !#zh 数字键盘 1
+     * @property num1
+     * @type {Number}
+     * @readonly
+     */
+    num1:97,
+
+    /**
+     * !#en The numeric keypad 2
+     * !#zh 数字键盘 2
+     * @property num2
+     * @type {Number}
+     * @readonly
+     */
+    num2:98,
+
+    /**
+     * !#en The numeric keypad 3
+     * !#zh 数字键盘 3
+     * @property num3
+     * @type {Number}
+     * @readonly
+     */
+    num3:99,
+
+    /**
+     * !#en The numeric keypad 4
+     * !#zh 数字键盘 4
+     * @property num4
+     * @type {Number}
+     * @readonly
+     */
+    num4:100,
+
+    /**
+     * !#en The numeric keypad 5
+     * !#zh 数字键盘 5
+     * @property num5
+     * @type {Number}
+     * @readonly
+     */
+    num5:101,
+
+    /**
+     * !#en The numeric keypad 6
+     * !#zh 数字键盘 6
+     * @property num6
+     * @type {Number}
+     * @readonly
+     */
+    num6:102,
+
+    /**
+     * !#en The numeric keypad 7
+     * !#zh 数字键盘 7
+     * @property num7
+     * @type {Number}
+     * @readonly
+     */
+    num7:103,
+
+    /**
+     * !#en The numeric keypad 8
+     * !#zh 数字键盘 8
+     * @property num8
+     * @type {Number}
+     * @readonly
+     */
+    num8:104,
+
+    /**
+     * !#en The numeric keypad 9
+     * !#zh 数字键盘 9
+     * @property num9
+     * @type {Number}
+     * @readonly
+     */
+    num9:105,
+
+    /**
+     * !#en The numeric keypad '*'
+     * !#zh 数字键盘 *
+     * @property *
+     * @type {Number}
+     * @readonly
+     */
+    '*':106,
+
+    /**
+     * !#en The numeric keypad '+'
+     * !#zh 数字键盘 +
+     * @property +
+     * @type {Number}
+     * @readonly
+     */
+    '+':107,
+
+    /**
+     * !#en The numeric keypad '-'
+     * !#zh 数字键盘 -
+     * @property -
+     * @type {Number}
+     * @readonly
+     */
+    '-':109,
+
+    /**
+     * !#en The numeric keypad 'delete'
+     * !#zh 数字键盘删除键
+     * @property numdel
+     * @type {Number}
+     * @readonly
+     */
+    'numdel':110,
+
+    /**
+     * !#en The numeric keypad '/'
+     * !#zh 数字键盘 /
+     * @property /
+     * @type {Number}
+     * @readonly
+     */
+    '/':111,
+
+    /**
+     * !#en The F1 function key
+     * !#zh F1 功能键
+     * @property f1
+     * @type {Number}
+     * @readonly
+     */
+    f1:112, //f1-f12 dont work on ie
+
+    /**
+     * !#en The F2 function key
+     * !#zh F2 功能键
+     * @property f2
+     * @type {Number}
+     * @readonly
+     */
+    f2:113,
+
+    /**
+     * !#en The F3 function key
+     * !#zh F3 功能键
+     * @property f3
+     * @type {Number}
+     * @readonly
+     */
+    f3:114,
+
+    /**
+     * !#en The F4 function key
+     * !#zh F4 功能键
+     * @property f4
+     * @type {Number}
+     * @readonly
+     */
+    f4:115,
+
+    /**
+     * !#en The F5 function key
+     * !#zh F5 功能键
+     * @property f5
+     * @type {Number}
+     * @readonly
+     */
+    f5:116,
+
+    /**
+     * !#en The F6 function key
+     * !#zh F6 功能键
+     * @property f6
+     * @type {Number}
+     * @readonly
+     */
+    f6:117,
+
+    /**
+     * !#en The F7 function key
+     * !#zh F7 功能键
+     * @property f7
+     * @type {Number}
+     * @readonly
+     */
+    f7:118,
+
+    /**
+     * !#en The F8 function key
+     * !#zh F8 功能键
+     * @property f8
+     * @type {Number}
+     * @readonly
+     */
+    f8:119,
+
+    /**
+     * !#en The F9 function key
+     * !#zh F9 功能键
+     * @property f9
+     * @type {Number}
+     * @readonly
+     */
+    f9:120,
+
+    /**
+     * !#en The F10 function key
+     * !#zh F10 功能键
+     * @property f10
+     * @type {Number}
+     * @readonly
+     */
+    f10:121,
+
+    /**
+     * !#en The F11 function key
+     * !#zh F11 功能键
+     * @property f11
+     * @type {Number}
+     * @readonly
+     */
+    f11:122,
+
+    /**
+     * !#en The F12 function key
+     * !#zh F12 功能键
+     * @property f12
+     * @type {Number}
+     * @readonly
+     */
+    f12:123,
+
+    /**
+     * !#en The numlock key
+     * !#zh 数字锁定键
+     * @property numlock
+     * @type {Number}
+     * @readonly
+     */
+    numlock:144,
+
+    /**
+     * !#en The scroll lock key
+     * !#zh 滚动锁定键
+     * @property scrolllock
+     * @type {Number}
+     * @readonly
+     */
+    scrolllock:145,
+
+    /**
+     * !#en The ';' key.
+     * !#zh 分号键
+     * @property ;
+     * @type {Number}
+     * @readonly
+     */
+    ';':186,
+
+    /**
+     * !#en The ';' key.
+     * !#zh 分号键
+     * @property semicolon
+     * @type {Number}
+     * @readonly
+     */
+    semicolon:186,
+
+    /**
+     * !#en The '=' key.
+     * !#zh 等于号键
+     * @property equal
+     * @type {Number}
+     * @readonly
+     */
+    equal:187,
+
+    /**
+     * !#en The '=' key.
+     * !#zh 等于号键
+     * @property =
+     * @type {Number}
+     * @readonly
+     */
+    '=':187,
+
+    /**
+     * !#en The ',' key.
+     * !#zh 逗号键
+     * @property ,
+     * @type {Number}
+     * @readonly
+     */
+    ',':188,
+
+    /**
+     * !#en The ',' key.
+     * !#zh 逗号键
+     * @property comma
+     * @type {Number}
+     * @readonly
+     */
+    comma:188,
+
+    /**
+     * !#en The dash '-' key.
+     * !#zh 中划线键
+     * @property dash
+     * @type {Number}
+     * @readonly
+     */
+    dash:189,
+
+    /**
+     * !#en The '.' key.
+     * !#zh 句号键
+     * @property .
+     * @type {Number}
+     * @readonly
+     */
+    '.':190,
+
+    /**
+     * !#en The '.' key
+     * !#zh 句号键
+     * @property period
+     * @type {Number}
+     * @readonly
+     */
+    period:190,
+
+    /**
+     * !#en The forward slash key
+     * !#zh 正斜杠键
+     * @property forwardslash
+     * @type {Number}
+     * @readonly
+     */
+    forwardslash:191,
+
+    /**
+     * !#en The grave key
+     * !#zh 按键 `
+     * @property grave
+     * @type {Number}
+     * @readonly
+     */
+    grave:192,
+
+    /**
+     * !#en The '[' key
+     * !#zh 按键 [
+     * @property [
+     * @type {Number}
+     * @readonly
+     */
+    '[':219,
+
+    /**
+     * !#en The '[' key
+     * !#zh 按键 [
+     * @property openbracket
+     * @type {Number}
+     * @readonly
+     */
+    openbracket:219,
+
+    /**
+     * !#en The '\' key
+     * !#zh 反斜杠键
+     * @property backslash
+     * @type {Number}
+     * @readonly
+     */
+    backslash:220,
+
+    /**
+     * !#en The ']' key
+     * !#zh 按键 ]
+     * @property ]
+     * @type {Number}
+     * @readonly
+     */
+    ']':221,
+
+    /**
+     * !#en The ']' key
+     * !#zh 按键 ]
+     * @property closebracket
+     * @type {Number}
+     * @readonly
+     */
+    closebracket:221,
+
+    /**
+     * !#en The quote key
+     * !#zh 单引号键
+     * @property quote
+     * @type {Number}
+     * @readonly
+     */
+    quote:222,
+
+    // gamepad controll
+
+    /**
+     * !#en The dpad left key
+     * !#zh 导航键 向左
+     * @property dpadLeft
+     * @type {Number}
+     * @readonly
+     */
+    dpadLeft:1000,
+
+    /**
+     * !#en The dpad right key
+     * !#zh 导航键 向右
+     * @property dpadRight
+     * @type {Number}
+     * @readonly
+     */
+    dpadRight:1001,
+
+    /**
+     * !#en The dpad up key
+     * !#zh 导航键 向上
+     * @property dpadUp
+     * @type {Number}
+     * @readonly
+     */
+    dpadUp:1003,
+
+    /**
+     * !#en The dpad down key
+     * !#zh 导航键 向下
+     * @property dpadDown
+     * @type {Number}
+     * @readonly
+     */
+    dpadDown:1004,
+
+    /**
+     * !#en The dpad center key
+     * !#zh 导航键 确定键
+     * @property dpadCenter
+     * @type {Number}
+     * @readonly
+     */
+    dpadCenter:1005
 };
 
 /**
- * default gl blend src function. Compatible with premultiplied alpha images.
- * @property BLEND_SRC
- * @type {Number}
- * @readonly
+ * Image formats
+ * @enum macro.ImageFormat
  */
-cc.defineGetterSetter(cc.macro, "BLEND_SRC", function (){
-    if (cc._renderType === cc.game.RENDER_TYPE_WEBGL
-         && cc.macro.OPTIMIZE_BLEND_FUNC_FOR_PREMULTIPLIED_ALPHA) {
-        return cc.macro.ONE;
-    }
-    else {
-        return cc.macro.SRC_ALPHA;
-    }
+cc.macro.ImageFormat = cc.Enum({
+    /**
+     * Image Format:JPG
+     * @property JPG
+     * @type {Number}
+     */
+    JPG: 0,
+    /**
+     * Image Format:PNG
+     * @property PNG
+     * @type {Number}
+     */
+    PNG: 1,
+    /**
+     * Image Format:TIFF
+     * @property TIFF
+     * @type {Number}
+     */
+    TIFF: 2,
+    /**
+     * Image Format:WEBP
+     * @property WEBP
+     * @type {Number}
+     */
+    WEBP: 3,
+    /**
+     * Image Format:PVR
+     * @property PVR
+     * @type {Number}
+     */
+    PVR: 4,
+    /**
+     * Image Format:ETC
+     * @property ETC
+     * @type {Number}
+     */
+    ETC: 5,
+    /**
+     * Image Format:S3TC
+     * @property S3TC
+     * @type {Number}
+     */
+    S3TC: 6,
+    /**
+     * Image Format:ATITC
+     * @property ATITC
+     * @type {Number}
+     */
+    ATITC: 7,
+    /**
+     * Image Format:TGA
+     * @property TGA
+     * @type {Number}
+     */
+    TGA: 8,
+    /**
+     * Image Format:RAWDATA
+     * @property RAWDATA
+     * @type {Number}
+     */
+    RAWDATA: 9,
+    /**
+     * Image Format:UNKNOWN
+     * @property UNKNOWN
+     * @type {Number}
+     */
+    UNKNOWN: 10
 });
 
 /**
- * <p>
- *     Linear interpolation between 2 numbers, the ratio sets how much it is biased to each end
- * </p>
- * @param {Number} a number A
- * @param {Number} b number B
- * @param {Number} r ratio between 0 and 1
- * @method lerp
- * @example {@link utils/api/engine/docs/cocos2d/core/platform/CCMacro/lerp.js}
+ * !#en
+ * Enum for blend factor
+ * Refer to: http://www.andersriggelsen.dk/glblendfunc.php
+ * !#zh
+ * 混合因子
+ * 可参考: http://www.andersriggelsen.dk/glblendfunc.php
+ * @enum macro.BlendFactor
  */
-cc.lerp = function (a, b, r) {
-    return a + (b - a) * r;
-};
-
-/**
- * get a random number from 0 to 0xffffff
- * @method rand
- * @returns {Number}
- */
-cc.rand = function () {
-	return Math.random() * 0xffffff;
-};
-
-/**
- * returns a random float between -1 and 1
- * @return {Number}
- * @method randomMinus1To1
- */
-cc.randomMinus1To1 = function () {
-    return (Math.random() - 0.5) * 2;
-};
-
-/**
- * returns a random float between 0 and 1, use Math.random directly
- * @return {Number}
- * @method random0To1
- */
-cc.random0To1 = Math.random;
-
-/**
- * converts degrees to radians
- * @param {Number} angle
- * @return {Number}
- * @method degreesToRadians
- */
-cc.degreesToRadians = function (angle) {
-    return angle * cc.macro.RAD;
-};
-
-/**
- * converts radians to degrees
- * @param {Number} angle
- * @return {Number}
- * @method radiansToDegrees
- */
-cc.radiansToDegrees = function (angle) {
-    return angle * cc.macro.DEG;
-};
-
-/**
- * Helpful macro that setups the GL server state, the correct GL program and sets the Model View Projection matrix
- * @param {Node} node setup node
- * @method nodeDrawSetup
- */
-cc.nodeDrawSetup = function (node) {
-    //cc.gl.enable(node._glServerState);
-    if (node._shaderProgram) {
-        //cc._renderContext.useProgram(node._shaderProgram._programObj);
-        node._shaderProgram.use();
-        node._shaderProgram.setUniformForModelViewAndProjectionMatrixWithMat4();
-    }
-};
-
-/*
- * <p>
- *     GL states that are enabled:<br/>
- *       - GL_TEXTURE_2D<br/>
- *       - GL_VERTEX_ARRAY<br/>
- *       - GL_TEXTURE_COORD_ARRAY<br/>
- *       - GL_COLOR_ARRAY<br/>
- * </p>
- * @method enableDefaultGLStates
- */
-// cc.enableDefaultGLStates = function () {
-    //TODO OPENGL STUFF
-    /*
-     glEnableClientState(GL_VERTEX_ARRAY);
-     glEnableClientState(GL_COLOR_ARRAY);
-     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-     glEnable(GL_TEXTURE_2D);*/
-// };
-
-/*
- * <p>
- *   Disable default GL states:<br/>
- *     - GL_TEXTURE_2D<br/>
- *     - GL_TEXTURE_COORD_ARRAY<br/>
- *     - GL_COLOR_ARRAY<br/>
- * </p>
- * @method disableDefaultGLStates
- */
-// cc.disableDefaultGLStates = function () {
-    //TODO OPENGL
-    /*
-     glDisable(GL_TEXTURE_2D);
-     glDisableClientState(GL_COLOR_ARRAY);
-     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-     glDisableClientState(GL_VERTEX_ARRAY);
+cc.macro.BlendFactor = cc.Enum({
+    /**
+     * !#en All use
+     * !#zh 全部使用
+     * @property {Number} ONE
      */
-// };
+    ONE:                    1,  //cc.macro.ONE
+    /**
+     * !#en Not all
+     * !#zh 全部不用
+     * @property {Number} ZERO
+     */
+    ZERO:                   0,      //cc.ZERO
+    /**
+     * !#en Using the source alpha
+     * !#zh 使用源颜色的透明度
+     * @property {Number} SRC_ALPHA
+     */
+    SRC_ALPHA:              0x302,  //cc.SRC_ALPHA
+    /**
+     * !#en Using the source color
+     * !#zh 使用源颜色
+     * @property {Number} SRC_COLOR
+     */
+    SRC_COLOR:              0x300,  //cc.SRC_COLOR
+    /**
+     * !#en Using the target alpha
+     * !#zh 使用目标颜色的透明度
+     * @property {Number} DST_ALPHA
+     */
+    DST_ALPHA:              0x304,  //cc.DST_ALPHA
+    /**
+     * !#en Using the target color
+     * !#zh 使用目标颜色
+     * @property {Number} DST_COLOR
+     */
+    DST_COLOR:              0x306,  //cc.DST_COLOR
+    /**
+     * !#en Minus the source alpha
+     * !#zh 减去源颜色的透明度
+     * @property {Number} ONE_MINUS_SRC_ALPHA
+     */
+    ONE_MINUS_SRC_ALPHA:    0x303,  //cc.ONE_MINUS_SRC_ALPHA
+    /**
+     * !#en Minus the source color
+     * !#zh 减去源颜色
+     * @property {Number} ONE_MINUS_SRC_COLOR
+     */
+    ONE_MINUS_SRC_COLOR:    0x301,  //cc.ONE_MINUS_SRC_COLOR
+    /**
+     * !#en Minus the target alpha
+     * !#zh 减去目标颜色的透明度
+     * @property {Number} ONE_MINUS_DST_ALPHA
+     */
+    ONE_MINUS_DST_ALPHA:    0x305,  //cc.ONE_MINUS_DST_ALPHA
+    /**
+     * !#en Minus the target color
+     * !#zh 减去目标颜色
+     * @property {Number} ONE_MINUS_DST_COLOR
+     */
+    ONE_MINUS_DST_COLOR:    0x307,  //cc.ONE_MINUS_DST_COLOR
+});
 
 /**
- * <p>
- *  Increments the GL Draws counts by one.<br/>
- *  The number of calls per frame are displayed on the screen when the CCDirector's stats are enabled.<br/>
- * </p>
- * @param {Number} addNumber
- * @method incrementGLDraws
+ * @enum macro.TextAlignment
  */
-cc.incrementGLDraws = function (addNumber) {
-    cc.g_NumberOfDraws += addNumber;
-};
+cc.macro.TextAlignment = cc.Enum({
+    /**
+     * @property {Number} LEFT
+     */
+    LEFT: 0,
+    /**
+     * @property {Number} CENTER
+     */
+    CENTER: 1,
+    /**
+     * @property {Number} RIGHT
+     */
+    RIGHT: 2
+});
 
 /**
- * Check webgl error.Error will be shown in console if exists.
- * @method checkGLErrorDebug
+ * @enum VerticalTextAlignment
  */
-cc.checkGLErrorDebug = function () {
-    if (cc.renderMode === cc.game.RENDER_TYPE_WEBGL) {
-        var _error = cc._renderContext.getError();
-        if (_error) {
-            cc.log(cc._LogInfos.checkGLErrorDebug, _error);
-        }
-    }
-};
+cc.macro.VerticalTextAlignment = cc.Enum({
+    /**
+     * @property {Number} TOP
+     */
+    TOP: 0,
+    /**
+     * @property {Number} CENTER
+     */
+    CENTER: 1,
+    /**
+     * @property {Number} BOTTOM
+     */
+    BOTTOM: 2
+});
+
+module.exports = cc.macro;

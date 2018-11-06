@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,41 +26,41 @@
 
 var requiringFrames = [];  // the requiring frame infos
 
-cc._RFpush = function (module, uuid, script) {
-    if (arguments.length === 2) {
-        script = uuid;
-        uuid = '';
-    }
-    requiringFrames.push({
-        uuid: uuid,
-        script: script,
-        module: module,
-        exports: module.exports,    // original exports
-        beh: null
-    });
-};
-
-cc._RFpop = function () {
-    var frameInfo = requiringFrames.pop();
-    // check exports
-    var module = frameInfo.module;
-    var exports = module.exports;
-    if (exports === frameInfo.exports) {
-        for (var anyKey in exports) {
-            // exported
-            return;
+cc._RF = {
+    push: function (module, uuid, script) {
+        if (script === undefined) {
+            script = uuid;
+            uuid = '';
         }
-        // auto export component
-        module.exports = exports = frameInfo.beh;
+        requiringFrames.push({
+            uuid: uuid,
+            script: script,
+            module: module,
+            exports: module.exports,    // original exports
+            beh: null
+        });
+    },
+    pop: function () {
+        var frameInfo = requiringFrames.pop();
+        // check exports
+        var module = frameInfo.module;
+        var exports = module.exports;
+        if (exports === frameInfo.exports) {
+            for (var anyKey in exports) {
+                // exported
+                return;
+            }
+            // auto export component
+            module.exports = exports = frameInfo.cls;
+        }
+    },
+    peek: function () {
+        return requiringFrames[requiringFrames.length - 1];
     }
-};
-
-cc._RFpeek = function () {
-    return requiringFrames[requiringFrames.length - 1];
 };
 
 if (CC_EDITOR) {
-    cc._RFreset = function () {
+    cc._RF.reset = function () {
         requiringFrames = [];
     };
 }

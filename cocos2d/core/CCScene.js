@@ -1,5 +1,6 @@
 /****************************************************************************
- Copyright (c) 2015 Chukong Technologies Inc.
+ Copyright (c) 2015-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
@@ -32,110 +33,77 @@ var NIL = function () {};
  * cc.Scene 是 cc.Node 的子类，仅作为一个抽象的概念。<br/>
  * cc.Scene 和 cc.Node 有点不同，用户不应直接修改 cc.Scene。
  * @class Scene
- * @extends _BaseNode
+ * @extends Node
  */
 cc.Scene = cc.Class({
     name: 'cc.Scene',
-    extends: require('./utils/base-node'),
+    extends: require('./CCNode'),
+
+    properties: {
+        _is3DNode: {
+            default: true,
+            override: true
+        },
+
+        /**
+         * !#en Indicates whether all (directly or indirectly) static referenced assets of this scene are releasable by default after scene unloading.
+         * !#zh 指示该场景中直接或间接静态引用到的所有资源是否默认在场景切换后自动释放。
+         * @property {Boolean} autoReleaseAssets
+         * @default false
+         */
+        autoReleaseAssets: {
+            default: undefined,
+            type: cc.Boolean
+        },
+
+    },
 
     ctor: function () {
-        var sgNode = this._sgNode = new _ccsg.Scene();
-        if (CC_JSB) {
-            sgNode.retain();
-        }
-        sgNode.setAnchorPoint(0.0, 0.0);
         this._anchorPoint.x = 0.0;
         this._anchorPoint.y = 0.0;
 
         this._activeInHierarchy = false;
         this._inited = !cc.game._isCloning;
+
+        if (CC_EDITOR) {
+            this._prefabSyncedInLiveReload = false;
+        }
+
+        // cache all depend assets for auto release
+        this.dependAssets = null;
     },
 
     destroy: function () {
-        var children = this._children;
-        var DontDestroy = cc.Object.Flags.DontDestroy;
-
-        for (var i = 0, len = children.length; i < len; ++i) {
-            var child = children[i];
-            if (child.isValid) {
-                if (!(child._objFlags & DontDestroy)) {
-                    child.destroy();
-                }
-            }
-        }
-
         this._super();
         this._activeInHierarchy = false;
     },
 
     _onHierarchyChanged: NIL,
+    _instantiate : null,
 
     _load: function () {
-        if ( ! this._inited) {
-            this._onBatchCreated();
+        if (!this._inited) {
+            if (CC_TEST) {
+                cc.assert(!this._activeInHierarchy, 'Should deactivate ActionManager and EventManager by default');
+            }
+            if (CC_EDITOR && this._prefabSyncedInLiveReload) {
+                this._onBatchRestored();
+            }
+            else {
+                this._onBatchCreated();
+            }
             this._inited = true;
         }
     },
 
     _activate: function (active) {
         active = (active !== false);
-        var i, child, children = this._children, len = children.length;
-
         if (CC_EDITOR || CC_TEST) {
             // register all nodes to editor
-            for (i = 0; i < len; ++i) {
-                child = children[i];
-                child._registerIfAttached(active);
-            }
+            this._registerIfAttached(active);
         }
-
-        this._activeInHierarchy = active;
-
-        // invoke onLoad and onEnable
-        for (i = 0; i < len; ++i) {
-            child = children[i];
-            if (child._active) {
-                child._onActivatedInHierarchy(active);
-            }
-        }
+        cc.director._nodeActivator.activateNode(this, active);
     }
 });
 
 module.exports = cc.Scene;
-
-if (CC_EDITOR) {
-    var ERR = '"%s" is not defined in the Scene, it is only defined in child nodes.';
-    Object.defineProperties(cc.Scene.prototype, {
-        active: {
-            get: function () {
-                cc.error(ERR, 'active');
-                return true;
-            },
-            set: function () {
-                cc.error(ERR, 'active');
-            }
-        },
-        activeInHierarchy: {
-            get: function () {
-                cc.error(ERR, 'activeInHierarchy');
-                return true;
-            },
-        },
-        getComponent: {
-            get: function () {
-                cc.error(ERR, 'getComponent');
-                return function () {
-                    return null;
-                };
-            }
-        },
-        addComponent: {
-            get: function () {
-                cc.error(ERR, 'addComponent');
-                return function () {
-                    return null;
-                };
-            }
-        },
-    });
-}

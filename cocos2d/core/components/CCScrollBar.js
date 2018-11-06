@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,6 +23,10 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
  ****************************************************************************/
+
+const misc = require('../utils/misc');
+const Component = require('./CCComponent');
+
 var GETTINGSHORTERFACTOR = 20;
 
 /**
@@ -68,14 +73,14 @@ var Scrollbar = cc.Class({
         /**
          * !#en The "handle" part of the scrollbar.
          * !#zh 作为当前滚动区域位置显示的滑块 Sprite。
-         * @property {cc.Sprite} handle
+         * @property {Sprite} handle
          */
         handle: {
             default: null,
             type: cc.Sprite,
-            tooltip: 'i18n:COMPONENT.scrollbar.handle',
+            tooltip: CC_DEV && 'i18n:COMPONENT.scrollbar.handle',
             notify: function() {
-                this._onScroll(cc.p(0, 0));
+                this._onScroll(cc.v2(0, 0));
             },
             animatable: false
         },
@@ -83,27 +88,27 @@ var Scrollbar = cc.Class({
         /**
          * !#en The direction of scrollbar.
          * !#zh ScrollBar 的滚动方向。
-         *@property {Scrollbar.Direction} direction
+         * @property {Scrollbar.Direction} direction
          */
         direction: {
             default: Direction.HORIZONTAL,
             type: Direction,
-            tooltip: 'i18n:COMPONENT.scrollbar.direction',
+            tooltip: CC_DEV && 'i18n:COMPONENT.scrollbar.direction',
             notify: function() {
-                this._onScroll(cc.p(0, 0));
+                this._onScroll(cc.v2(0, 0));
             },
             animatable: false
         },
 
         /**
-         * !#en Whehter enable auto hide or not.
+         * !#en Whether enable auto hide or not.
          * !#zh 是否在没有滚动动作时自动隐藏 ScrollBar。
-         *@property {Boolean} enableAutoHide
+         * @property {Boolean} enableAutoHide
          */
         enableAutoHide: {
             default: true,
             animatable: false,
-            tooltip: 'i18n:COMPONENT.scrollbar.auto_hide',
+            tooltip: CC_DEV && 'i18n:COMPONENT.scrollbar.auto_hide',
         },
 
         /**
@@ -113,12 +118,12 @@ var Scrollbar = cc.Class({
          * !#zh
          * 没有滚动动作后经过多久会自动隐藏。
          * 注意：只要当 “enableAutoHide” 为 true 时，才有效。
-         *@property {Number} autoHideTime
+         * @property {Number} autoHideTime
          */
         autoHideTime: {
             default: 1.0,
             animatable: false,
-            tooltip: 'i18n:COMPONENT.scrollbar.auto_hide_time',
+            tooltip: CC_DEV && 'i18n:COMPONENT.scrollbar.auto_hide_time',
         }
     },
 
@@ -131,14 +136,15 @@ var Scrollbar = cc.Class({
     },
 
     _convertToScrollViewSpace: function(content) {
-        var worldSpacePos = content.convertToWorldSpace(cc.p(0, 0));
+        var worldSpacePos = content.convertToWorldSpace(cc.v2(0, 0));
         var scrollViewSpacePos = this._scrollView.node.convertToNodeSpace(worldSpacePos);
         return scrollViewSpacePos;
     },
 
     _setOpacity: function(opacity) {
         if (this.handle) {
-            this.node.setOpacity(opacity);
+            this.node.opacity = opacity;
+            this.handle.node.opacity = opacity;
         }
     },
 
@@ -149,6 +155,7 @@ var Scrollbar = cc.Class({
             if(content){
                 var contentSize = content.getContentSize();
                 var scrollViewSize = this._scrollView.node.getContentSize();
+                var handleNodeSize = this.node.getContentSize();
 
                 if(this._conditionalDisableScrollBar(contentSize, scrollViewSize)) {
                     return;
@@ -163,23 +170,27 @@ var Scrollbar = cc.Class({
                 var scrollViewMeasure = 0;
                 var outOfBoundaryValue = 0;
                 var contentPosition = 0;
+                var handleNodeMeasure = 0;
 
                 if (this.direction === Direction.HORIZONTAL) {
                     contentMeasure = contentSize.width;
                     scrollViewMeasure = scrollViewSize.width;
+                    handleNodeMeasure = handleNodeSize.width;
                     outOfBoundaryValue = outOfBoundary.x;
 
                     contentPosition = -this._convertToScrollViewSpace(content).x;
                 } else if (this.direction === Direction.VERTICAL) {
                     contentMeasure = contentSize.height;
                     scrollViewMeasure = scrollViewSize.height;
+                    handleNodeMeasure = handleNodeSize.height;
                     outOfBoundaryValue = outOfBoundary.y;
 
                     contentPosition = -this._convertToScrollViewSpace(content).y;
                 }
 
-                var length = this._calculateLength(contentMeasure, scrollViewMeasure, outOfBoundaryValue);
-                var position = this._calculatePosition(contentMeasure, scrollViewMeasure, contentPosition, outOfBoundaryValue, length);
+                var length = this._calculateLength(contentMeasure, scrollViewMeasure, handleNodeMeasure, outOfBoundaryValue);
+                var position = this._calculatePosition(contentMeasure, scrollViewMeasure, handleNodeMeasure, contentPosition, outOfBoundaryValue, length);
+
                 this._updateLength(length);
                 this._updateHanlderPosition(position);
             }
@@ -190,28 +201,28 @@ var Scrollbar = cc.Class({
         if (this.handle) {
             var oldPosition = this._fixupHandlerPosition();
 
-            this.handle.node.setPosition(cc.pAdd(position, oldPosition));
+            this.handle.node.setPosition(position.x + oldPosition.x, position.y + oldPosition.y);
         }
     },
 
     _fixupHandlerPosition: function() {
         var barSize = this.node.getContentSize();
         var barAnchor = this.node.getAnchorPoint();
-        var barPosition = this.node.getPosition();
+        var handleSize = this.handle.node.getContentSize();
 
-        var fixupPosition;
         var handleParent = this.handle.node.parent;
+
+        var leftBottomWorldPosition = this.node.convertToWorldSpaceAR(cc.v2(-barSize.width * barAnchor.x, -barSize.height * barAnchor.y));
+        var fixupPosition = handleParent.convertToNodeSpaceAR(leftBottomWorldPosition);
+
         if (this.direction === Direction.HORIZONTAL) {
-            var leftSideWorldPosition = this.node.convertToWorldSpaceAR(cc.p(-barSize.width * barAnchor.x, -barSize.height * barAnchor.y));
-
-            fixupPosition = handleParent.convertToNodeSpaceAR(leftSideWorldPosition);
+            fixupPosition = cc.v2(fixupPosition.x, fixupPosition.y + (barSize.height - handleSize.height) / 2);
         } else if (this.direction === Direction.VERTICAL) {
-            var bottomSideWorldPosition = this.node.convertToWorldSpaceAR(cc.p(-barSize.width * barAnchor.x, -barSize.height * barAnchor.y));
-
-            fixupPosition = handleParent.convertToNodeSpaceAR(bottomSideWorldPosition);
+            fixupPosition = cc.v2(fixupPosition.x + (barSize.width - handleSize.width) / 2, fixupPosition.y);
         }
 
         this.handle.node.setPosition(fixupPosition);
+
         return fixupPosition;
     },
 
@@ -262,17 +273,17 @@ var Scrollbar = cc.Class({
         this._autoHideRemainingTime = this.autoHideTime;
     },
 
-    _calculateLength: function(contentMeasure, scrollViewMeasure, outOfBoundary) {
+    _calculateLength: function(contentMeasure, scrollViewMeasure, handleNodeMeasure, outOfBoundary) {
         var denominatorValue = contentMeasure;
         if (outOfBoundary) {
             denominatorValue += (outOfBoundary > 0 ? outOfBoundary : -outOfBoundary) * GETTINGSHORTERFACTOR;
         }
 
         var lengthRation = scrollViewMeasure / denominatorValue;
-        return scrollViewMeasure * lengthRation;
+        return handleNodeMeasure * lengthRation;
     },
 
-    _calculatePosition: function(contentMeasure, scrollViewMeasure, contentPosition, outOfBoundary, actualLenth) {
+    _calculatePosition: function(contentMeasure, scrollViewMeasure, handleNodeMeasure, contentPosition, outOfBoundary, actualLenth) {
         var denominatorValue = contentMeasure - scrollViewMeasure;
         if (outOfBoundary) {
             denominatorValue += Math.abs(outOfBoundary);
@@ -281,22 +292,22 @@ var Scrollbar = cc.Class({
         var positionRatio = 0;
         if (denominatorValue) {
             positionRatio = contentPosition / denominatorValue;
-            positionRatio = cc.clamp01(positionRatio);
+            positionRatio = misc.clamp01(positionRatio);
         }
 
-        var position = (scrollViewMeasure - actualLenth) * positionRatio;
+        var position = (handleNodeMeasure - actualLenth) * positionRatio;
         if (this.direction === Direction.VERTICAL) {
-            return cc.p(0, position);
+            return cc.v2(0, position);
         } else {
-            return cc.p(position, 0);
+            return cc.v2(position, 0);
         }
     },
 
     _updateLength: function(length) {
         if (this.handle) {
             var handleNode = this.handle.node;
-            var handleNodeSize = this.node.getContentSize();
-            handleNode.setAnchorPoint(cc.p(0, 0));
+            var handleNodeSize = handleNode.getContentSize();
+            handleNode.setAnchorPoint(cc.v2(0, 0));
             if (this.direction === Direction.HORIZONTAL) {
                 handleNode.setContentSize(length, handleNodeSize.height);
             } else {
@@ -327,9 +338,14 @@ var Scrollbar = cc.Class({
         }
     },
 
-    reset: function() {
+    hide: function() {
         this._autoHideRemainingTime = 0;
         this._setOpacity(0);
+    },
+
+    show: function() {
+        this._autoHideRemainingTime = this.autoHideTime;
+        this._setOpacity(this._opacity);
     },
 
     update: function(dt) {

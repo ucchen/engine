@@ -1,7 +1,8 @@
 /****************************************************************************
  Copyright (c) 2008-2010 Ricardo Quesada
  Copyright (c) 2011-2012 cocos2d-x.org
- Copyright (c) 2013-2014 Chukong Technologies Inc.
+ Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
@@ -34,7 +35,9 @@
  * @class ActionInstant
  * @extends FiniteTimeAction
  */
-cc.ActionInstant = cc.FiniteTimeAction.extend({
+cc.ActionInstant = cc.Class({
+    name: 'cc.ActionInstant',
+    extends: cc.FiniteTimeAction,
     isDone:function () {
         return true;
     },
@@ -72,10 +75,16 @@ cc.ActionInstant = cc.FiniteTimeAction.extend({
  * @class Show
  * @extends ActionInstant
  */
-cc.Show = cc.ActionInstant.extend({
+cc.Show = cc.Class({
+    name: 'cc.Show',
+    extends: cc.ActionInstant,
 
     update:function (dt) {
-        this.target.visible = true;
+        var _renderComps = this.target.getComponentsInChildren(cc.RenderComponent);
+        for (var i = 0; i < _renderComps.length; ++i) {
+            var render = _renderComps[i];
+            render.enabled = true;
+        }
     },
 
     reverse:function () {
@@ -105,10 +114,16 @@ cc.show = function () {
  * @class Hide
  * @extends ActionInstant
  */
-cc.Hide = cc.ActionInstant.extend({
+cc.Hide = cc.Class({
+    name: 'cc.Hide',
+    extends: cc.ActionInstant,
 
     update:function (dt) {
-        this.target.visible = false;
+        var _renderComps = this.target.getComponentsInChildren(cc.RenderComponent);
+        for (var i = 0; i < _renderComps.length; ++i) {
+            var render = _renderComps[i];
+            render.enabled = false;
+        }
     },
 
     reverse:function () {
@@ -138,10 +153,16 @@ cc.hide = function () {
  * @class ToggleVisibility
  * @extends ActionInstant
  */
-cc.ToggleVisibility = cc.ActionInstant.extend({
+cc.ToggleVisibility = cc.Class({
+    name: 'cc.ToggleVisibility',
+    extends: cc.ActionInstant,
 
     update:function (dt) {
-        this.target.visible = !this.target.visible;
+        var _renderComps = this.target.getComponentsInChildren(cc.RenderComponent);
+        for (var i = 0; i < _renderComps.length; ++i) {
+            var render = _renderComps[i];
+            render.enabled = !render.enabled;
+        }
     },
 
     reverse:function () {
@@ -170,18 +191,18 @@ cc.toggleVisibility = function () {
  * Delete self in the next frame.
  * @class RemoveSelf
  * @extends ActionInstant
- * @param {Boolean} isNeedCleanUp
+ * @param {Boolean} [isNeedCleanUp=true]
  *
  * @example
  * // example
  * var removeSelfAction = new cc.RemoveSelf(false);
  */
-cc.RemoveSelf = cc.ActionInstant.extend({
-     _isNeedCleanUp: true,
+cc.RemoveSelf = cc.Class({
+    name: 'cc.RemoveSelf',
+    extends: cc.ActionInstant,
 
     ctor:function(isNeedCleanUp){
-        cc.FiniteTimeAction.prototype.ctor.call(this);
-
+        this._isNeedCleanUp = true;
 	    isNeedCleanUp !== undefined && this.init(isNeedCleanUp);
     },
 
@@ -207,7 +228,7 @@ cc.RemoveSelf = cc.ActionInstant.extend({
  * !#en Create a RemoveSelf object with a flag indicate whether the target should be cleaned up while removing.
  * !#zh 从父节点移除自身。
  * @method removeSelf
- * @param {Boolean} isNeedCleanUp
+ * @param {Boolean} [isNeedCleanUp = true]
  * @return {ActionInstant}
  *
  * @example
@@ -227,11 +248,11 @@ cc.removeSelf = function(isNeedCleanUp){
  * @example
  * var flipXAction = new cc.FlipX(true);
  */
-cc.FlipX = cc.ActionInstant.extend({
-    _flippedX:false,
+cc.FlipX = cc.Class({
+    name: 'cc.FlipX',
+    extends: cc.ActionInstant,
 
     ctor:function(flip){
-        cc.FiniteTimeAction.prototype.ctor.call(this);
         this._flippedX = false;
 		flip !== undefined && this.initWithFlipX(flip);
     },
@@ -247,7 +268,7 @@ cc.FlipX = cc.ActionInstant.extend({
     },
 
     update:function (dt) {
-        this.target.scaleX = Math.abs(this.target.scaleX) * (this._flippedX ? 1 : -1);
+        this.target.scaleX = Math.abs(this.target.scaleX) * (this._flippedX ? -1 : 1);
     },
 
     reverse:function () {
@@ -282,13 +303,12 @@ cc.flipX = function (flip) {
  * @example
  * var flipYAction = new cc.FlipY(true);
  */
-cc.FlipY = cc.ActionInstant.extend({
-    _flippedY:false,
+cc.FlipY = cc.Class({
+    name: 'cc.FlipY',
+    extends: cc.ActionInstant,
 
     ctor: function(flip){
-        cc.FiniteTimeAction.prototype.ctor.call(this);
         this._flippedY = false;
-
 		flip !== undefined && this.initWithFlipY(flip);
     },
 
@@ -303,7 +323,7 @@ cc.FlipY = cc.ActionInstant.extend({
     },
 
     update:function (dt) {
-        this.target.scaleY = Math.abs(this.target.scaleY) * (this._flippedX ? 1 : -1);
+        this.target.scaleY = Math.abs(this.target.scaleY) * (this._flippedY ? -1 : 1);
     },
 
     reverse:function () {
@@ -337,15 +357,14 @@ cc.flipY = function (flip) {
  * @param {Vec2|Number} pos
  * @param {Number} [y]
  * @example
- * var placeAction = new cc.Place(cc.p(200, 200));
+ * var placeAction = new cc.Place(cc.v2(200, 200));
  * var placeAction = new cc.Place(200, 200);
  */
-cc.Place = cc.ActionInstant.extend({
-    _x: 0,
-	_y: 0,
+cc.Place = cc.Class({
+    name: 'cc.Place',
+    extends: cc.ActionInstant,
 
     ctor:function(pos, y){
-        cc.FiniteTimeAction.prototype.ctor.call(this);
         this._x = 0;
 	    this._y = 0;
 
@@ -390,7 +409,7 @@ cc.Place = cc.ActionInstant.extend({
  * @return {ActionInstant}
  * @example
  * // example
- * var placeAction = cc.place(cc.p(200, 200));
+ * var placeAction = cc.place(cc.v2(200, 200));
  * var placeAction = cc.place(200, 200);
  */
 cc.place = function (pos, y) {
@@ -403,8 +422,8 @@ cc.place = function (pos, y) {
  * @class CallFunc
  * @extends ActionInstant
  * @param {function} selector
- * @param {object|null} [selectorTarget]
- * @param {*|null} [data] data for function, it accepts all data types.
+ * @param {object} [selectorTarget=null]
+ * @param {*} [data=null] data for function, it accepts all data types.
  * @example
  * // example
  * // CallFunc without data
@@ -413,21 +432,21 @@ cc.place = function (pos, y) {
  * // CallFunc with data
  * var finish = new cc.CallFunc(this.removeFromParentAndCleanup, this,  true);
  */
-cc.CallFunc = cc.ActionInstant.extend({
-    _selectorTarget:null,
-    _function:null,
-    _data:null,
+cc.CallFunc = cc.Class({
+    name: 'cc.CallFunc',
+    extends: cc.ActionInstant,
 
     /*
      * Constructor function, override it to extend the construction behavior, remember to call "this._super()" in the extended "ctor" function. <br />
 	 * Creates a CallFunc action with the callback.
 	 * @param {function} selector
-	 * @param {object|null} [selectorTarget]
-	 * @param {*|null} [data] data for function, it accepts all data types.
+	 * @param {object} [selectorTarget=null]
+	 * @param {*} [data=null] data for function, it accepts all data types.
 	 */
     ctor:function(selector, selectorTarget, data){
-        cc.FiniteTimeAction.prototype.ctor.call(this);
-
+        this._selectorTarget = null;
+        this._function = null;
+        this._data = null;
         this.initWithFunction(selector, selectorTarget, data);
     },
 
@@ -496,8 +515,8 @@ cc.CallFunc = cc.ActionInstant.extend({
  * !#zh 执行回调函数。
  * @method callFunc
  * @param {function} selector
- * @param {object|null} [selectorTarget]
- * @param {*|null} [data] data for function, it accepts all data types.
+ * @param {object} [selectorTarget=null]
+ * @param {*} [data=null] - data for function, it accepts all data types.
  * @return {ActionInstant}
  * @example
  * // example

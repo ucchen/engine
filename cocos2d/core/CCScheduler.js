@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -26,30 +27,47 @@
 /**
  * @module cc
  */
+const js = require('./platform/js');
+const IdGenerater = require('./platform/id-generater');
+const MAX_POOL_SIZE = 20;
+
+var idGenerater = new IdGenerater('Scheduler');
 
 //data structures
 /*
  * A list double-linked list used for "updates with priority"
  * @class ListEntry
- * @param {ListEntry} prev
- * @param {ListEntry} next
- * @param {function} callback
  * @param {Object} target not retained (retained by hashUpdateEntry)
  * @param {Number} priority
  * @param {Boolean} paused
  * @param {Boolean} markedForDeletion selector will no longer be called and entry will be removed at end of the next tick
  */
-var ListEntry = function (prev, next, callback, target, priority, paused, markedForDeletion) {
-    this.prev = prev;
-    this.next = next;
-    this.callback = callback;
+var ListEntry = function (target, priority, paused, markedForDeletion) {
     this.target = target;
     this.priority = priority;
     this.paused = paused;
     this.markedForDeletion = markedForDeletion;
 };
-ListEntry.prototype.trigger = function (dt) {
-    this.callback.call(this.target, dt);
+
+var _listEntries = [];
+ListEntry.get = function (target, priority, paused, markedForDeletion) {
+    var result = _listEntries.pop();
+    if (result) {
+        result.target = target;
+        result.priority = priority;
+        result.paused = paused;
+        result.markedForDeletion = markedForDeletion;
+    }
+    else {
+        result = new ListEntry(target, priority, paused, markedForDeletion);
+    }
+    return result;
+};
+ListEntry.put = function (entry) {
+    if (_listEntries.length < MAX_POOL_SIZE) {
+        entry.target = null;
+        _listEntries.push(entry);
+    }
 };
 
 /*
@@ -59,14 +77,32 @@ ListEntry.prototype.trigger = function (dt) {
  * @param {ListEntry} entry entry in the list
  * @param {Object} target hash key (retained)
  * @param {function} callback
- * @param {Array} hh
  */
-var HashUpdateEntry = function (list, entry, target, callback, hh) {
+var HashUpdateEntry = function (list, entry, target, callback) {
     this.list = list;
     this.entry = entry;
     this.target = target;
     this.callback = callback;
-    this.hh = hh;
+};
+var _hashUpdateEntries = [];
+HashUpdateEntry.get = function (list, entry, target, callback) {
+    var result = _hashUpdateEntries.pop();
+    if (result) {
+        result.list = list;
+        result.entry = entry;
+        result.target = target;
+        result.callback = callback;
+    }
+    else {
+        result = new HashUpdateEntry(list, entry, target, callback);
+    }
+    return result;
+};
+HashUpdateEntry.put = function (entry) {
+    if (_hashUpdateEntries.length < MAX_POOL_SIZE) {
+        entry.list = entry.entry = entry.target = entry.callback = null;
+        _hashUpdateEntries.push(entry);
+    }
 };
 
 //
@@ -79,9 +115,8 @@ var HashUpdateEntry = function (list, entry, target, callback, hh) {
  * @param {Timer} currentTimer
  * @param {Boolean} currentTimerSalvaged
  * @param {Boolean} paused
- * @param {Array} hh
  */
-var HashTimerEntry = function (timers, target, timerIndex, currentTimer, currentTimerSalvaged, paused, hh) {
+var HashTimerEntry = function (timers, target, timerIndex, currentTimer, currentTimerSalvaged, paused) {
     var _t = this;
     _t.timers = timers;
     _t.target = target;
@@ -89,117 +124,139 @@ var HashTimerEntry = function (timers, target, timerIndex, currentTimer, current
     _t.currentTimer = currentTimer;
     _t.currentTimerSalvaged = currentTimerSalvaged;
     _t.paused = paused;
-    _t.hh = hh;
+};
+var _hashTimerEntries = [];
+HashTimerEntry.get = function (timers, target, timerIndex, currentTimer, currentTimerSalvaged, paused) {
+    var result = _hashTimerEntries.pop();
+    if (result) {
+        result.timers = timers;
+        result.target = target;
+        result.timerIndex = timerIndex;
+        result.currentTimer = currentTimer;
+        result.currentTimerSalvaged = currentTimerSalvaged;
+        result.paused = paused;
+    }
+    else {
+        result = new HashTimerEntry(timers, target, timerIndex, currentTimer, currentTimerSalvaged, paused);
+    }
+    return result;
+};
+HashTimerEntry.put = function (entry) {
+    if (_hashTimerEntries.length < MAX_POOL_SIZE) {
+        entry.timers = entry.target = entry.currentTimer = null;
+        _hashTimerEntries.push(entry);
+    }
 };
 
 /*
- * Light weight timer.
- * @class Timer
+ * Light weight timer
+ * @extends cc.Class
  */
-var Timer = cc._Class.extend({
+function CallbackTimer () {
+    this._lock = false;
+    this._scheduler = null;
+    this._elapsed = -1;
+    this._runForever = false;
+    this._useDelay = false;
+    this._timesExecuted = 0;
+    this._repeat = 0;
+    this._delay = 0;
+    this._interval = 0;
 
-    getInterval : function(){return this._interval;},
-    setInterval : function(interval){this._interval = interval;},
+    this._target = null;
+    this._callback = null;
+}
 
-    setupTimerWithInterval: function(seconds, repeat, delay){
-        this._elapsed = -1;
-        this._interval = seconds;
-        this._delay = delay;
-        this._useDelay = (this._delay > 0);
-        this._repeat = repeat;
-        this._runForever = (this._repeat === cc.macro.REPEAT_FOREVER);
-    },
+var proto = CallbackTimer.prototype;
 
-    trigger: function(){
-        return 0;
-    },
+proto.initWithCallback = function (scheduler, callback, target, seconds, repeat, delay) {
+    this._lock = false;
+    this._scheduler = scheduler;
+    this._target = target;
+    this._callback = callback;
 
-    cancel: function(){
-        return 0;
-    },
+    this._elapsed = -1;
+    this._interval = seconds;
+    this._delay = delay;
+    this._useDelay = (this._delay > 0);
+    this._repeat = repeat;
+    this._runForever = (this._repeat === cc.macro.REPEAT_FOREVER);
+    return true;
+};
+/**
+ * @return {Number} returns interval of timer
+ */
+proto.getInterval = function(){return this._interval;};
+/**
+ * @param {Number} interval set interval in seconds
+ */
+proto.setInterval = function(interval){this._interval = interval;};
 
-    ctor:function () {
-        this._scheduler = null;
-        this._elapsed = -1;
-        this._runForever = false;
-        this._useDelay = false;
+/**
+ * triggers the timer
+ * @param {Number} dt delta time
+ */
+proto.update = function (dt) {
+    if (this._elapsed === -1) {
+        this._elapsed = 0;
         this._timesExecuted = 0;
-        this._repeat = 0;
-        this._delay = 0;
-        this._interval = 0;
-    },
+    } else {
+        this._elapsed += dt;
+        if (this._runForever && !this._useDelay) {//standard timer usage
+            if (this._elapsed >= this._interval) {
+                this.trigger();
+                this._elapsed = 0;
+            }
+        } else {//advanced usage
+            if (this._useDelay) {
+                if (this._elapsed >= this._delay) {
+                    this.trigger();
 
-    update:function (dt) {
-        if (this._elapsed === -1) {
-            this._elapsed = 0;
-            this._timesExecuted = 0;
-        } else {
-            this._elapsed += dt;
-            if (this._runForever && !this._useDelay) {//standard timer usage
+                    this._elapsed -= this._delay;
+                    this._timesExecuted += 1;
+                    this._useDelay = false;
+                }
+            } else {
                 if (this._elapsed >= this._interval) {
                     this.trigger();
+
                     this._elapsed = 0;
+                    this._timesExecuted += 1;
                 }
-            } else {//advanced usage
-                if (this._useDelay) {
-                    if (this._elapsed >= this._delay) {
-                        this.trigger();
-
-                        this._elapsed -= this._delay;
-                        this._timesExecuted += 1;
-                        this._useDelay = false;
-                    }
-                } else {
-                    if (this._elapsed >= this._interval) {
-                        this.trigger();
-
-                        this._elapsed = 0;
-                        this._timesExecuted += 1;
-                    }
-                }
-
-                if (!this._runForever && this._timesExecuted > this._repeat)
-                    this.cancel();
             }
+
+            if (this._callback && !this._runForever && this._timesExecuted > this._repeat)
+                this.cancel();
         }
     }
-});
+};
 
-var TimerTargetSelector = Timer.extend({
+proto.getCallback = function(){
+    return this._callback;
+};
 
-    ctor: function(){
-        this._target = null;
-        this._selector = null;
-    },
-
-    initWithSelector: function(scheduler, target, selector, seconds, repeat, delay){
-        this._scheduler = scheduler;
-        this._target = target;
-        this._selector = selector;
-        this.setupTimerWithInterval(seconds, repeat, delay);
-        return true;
-    },
-
-    getSelector: function(){
-        return this._selector;
-    },
-
-    trigger: function(){
-        //override
-        if (this._selector && this._target){
-            this._selector.call(this._target, this._elapsed);
-        }
-    },
-
-    cancel: function(){
-        //override
-        this._scheduler.unschedule(this._selector, this._target);
+proto.trigger = function () {
+    if (this._target && this._callback) {
+        this._lock = true;
+        this._callback.call(this._target, this._elapsed);
+        this._lock = false;
     }
+};
 
-});
+proto.cancel = function () {
+    //override
+    this._scheduler.unschedule(this._callback, this._target);
+};
 
-var getTargetId = function (target) {
-    return target.__instanceId || target.uuid;
+var _timers = [];
+CallbackTimer.get = function () {
+    return _timers.pop() || new CallbackTimer();
+};
+CallbackTimer.put = function (timer) {
+    if (_timers.length < MAX_POOL_SIZE && !timer._lock) {
+        timer._scheduler = timer._target = timer._callback = null;
+        _timers.push(timer);
+    }
 };
 
 /**
@@ -223,132 +280,90 @@ var getTargetId = function (target) {
  *
  * @class Scheduler
  */
-cc.Scheduler = cc._Class.extend({
-    _timeScale:1.0,
+cc.Scheduler = function () {
+    this._timeScale = 1.0;
+    this._updatesNegList = [];  // list of priority < 0
+    this._updates0List = [];    // list of priority == 0
+    this._updatesPosList = [];  // list of priority > 0
+    this._hashForUpdates = js.createMap(true);  // hash used to fetch quickly the list entries for pause, delete, etc
+    this._hashForTimers = js.createMap(true);   // Used for "selectors with interval"
+    this._currentTarget = null;
+    this._currentTargetSalvaged = false;
+    this._updateHashLocked = false; // If true unschedule will not remove anything from a hash. Elements will only be marked for deletion.
 
-    //_updates : null, //_updates[0] list of priority < 0, _updates[1] list of priority == 0, _updates[2] list of priority > 0,
-    _updatesNegList: null,
-    _updates0List: null,
-    _updatesPosList: null,
+    this._arrayForTimers = [];  // Speed up indexing
+    //this._arrayForUpdates = [];   // Speed up indexing
+};
 
-    _hashForTimers:null, //Used for "selectors with interval"
-    _arrayForTimers:null, //Speed up indexing
-    _hashForUpdates:null, // hash used to fetch quickly the list entries for pause,delete,etc
-    //_arrayForUpdates:null, //Speed up indexing
-
-    _currentTarget:null,
-    _currentTargetSalvaged:false,
-    _updateHashLocked:false, //If true unschedule will not remove anything from a hash. Elements will only be marked for deletion.
-
-
-    ctor:function () {
-        this._timeScale = 1.0;
-        this._updatesNegList = [];
-        this._updates0List = [];
-        this._updatesPosList = [];
-
-        this._hashForUpdates = {};
-        this._hashForTimers = {};
-        this._currentTarget = null;
-        this._currentTargetSalvaged = false;
-        this._updateHashLocked = false;
-
-        this._arrayForTimers = [];
-        //this._arrayForUpdates = [];
-    },
-
+cc.Scheduler.prototype = {
+    constructor: cc.Scheduler,
     //-----------------------private method----------------------
 
-    _schedulePerFrame: function(callback, target, priority, paused){
-        var hashElement = this._hashForUpdates[getTargetId(target)];
-        if (hashElement && hashElement.entry){
-            // check if priority has changed
-            if (hashElement.entry.priority !== priority){
-                if (this._updateHashLocked){
-                    cc.log("warning: you CANNOT change update priority in scheduled function");
-                    hashElement.entry.markedForDeletion = false;
-                    hashElement.entry.paused = paused;
-                    return;
-                }else{
-                    // will be added again outside if (hashElement).
-                    this.unscheduleUpdate(target);
-                }
-            }else{
-                hashElement.entry.markedForDeletion = false;
-                hashElement.entry.paused = paused;
-                return;
+    _removeHashElement: function (element) {
+        delete this._hashForTimers[element.target._id];
+        var arr = this._arrayForTimers;
+        for (var i = 0, l = arr.length; i < l; i++) {
+            if (arr[i] === element) {
+                arr.splice(i, 1);
+                break;
             }
         }
-
-        // most of the updates are going to be 0, that's way there
-        // is an special list for updates with priority 0
-        if (priority === 0){
-            this._appendIn(this._updates0List, callback, target, paused);
-        }else if (priority < 0){
-            this._priorityIn(this._updatesNegList, callback, target, priority, paused);
-        }else{
-            // priority > 0
-            this._priorityIn(this._updatesPosList, callback, target, priority, paused);
-        }
+        HashTimerEntry.put(element);
     },
 
-    _removeHashElement:function (element) {
-        delete this._hashForTimers[getTargetId(element.target)];
-        cc.js.array.remove(this._arrayForTimers, element);
-        element.Timer = null;
-        element.target = null;
-        element = null;
-    },
-
-    _removeUpdateFromHash:function (entry) {
-        var self = this, element = self._hashForUpdates[getTargetId(entry.target)];
+    _removeUpdateFromHash: function (entry) {
+        var targetId = entry.target._id;
+        var self = this, element = self._hashForUpdates[targetId];
         if (element) {
-            //list entry
-            cc.js.array.remove(element.list, element.entry);
-
-            delete self._hashForUpdates[getTargetId(element.target)];
-            //cc.js.array.remove(self._hashForUpdates, element);
-            element.entry = null;
-
-            //hash entry
-            element.target = null;
-        }
-    },
-
-    _priorityIn:function (ppList, callback,  target, priority, paused) {
-        var self = this,
-            listElement = new ListEntry(null, null, callback, target, priority, paused, false);
-
-        // empey list ?
-        if (!ppList) {
-            ppList = [];
-            ppList.push(listElement);
-        } else {
-            var index2Insert = ppList.length - 1;
-            for(var i = 0; i <= index2Insert; i++){
-                if (priority < ppList[i].priority) {
-                    index2Insert = i;
+            // Remove list entry from list
+            var list = element.list, listEntry = element.entry;
+            for (var i = 0, l = list.length; i < l; i++) {
+                if (list[i] === listEntry) {
+                    list.splice(i, 1);
                     break;
                 }
             }
-            ppList.splice(i, 0, listElement);
+
+            delete self._hashForUpdates[targetId];
+            ListEntry.put(listEntry);
+            HashUpdateEntry.put(element);
         }
-
-        //update hash entry for quick access
-        self._hashForUpdates[getTargetId(target)] = new HashUpdateEntry(ppList, listElement, target, null);
-
-        return ppList;
     },
 
-    _appendIn:function (ppList, callback, target, paused) {
-        var self = this, listElement = new ListEntry(null, null, callback, target, 0, paused, false);
+    _priorityIn: function (ppList, listElement, priority) {
+        for (var i = 0; i < ppList.length; i++){
+            if (priority < ppList[i].priority) {
+                ppList.splice(i, 0, listElement);
+                return;
+            }
+        }
         ppList.push(listElement);
+    },
 
-        //update hash entry for quicker access
-        self._hashForUpdates[getTargetId(target)] = new HashUpdateEntry(ppList, listElement, target, null, null);
+    _appendIn: function (ppList, listElement) {
+        ppList.push(listElement);
     },
 
     //-----------------------public method-------------------------
+    /**
+     * !en This method should be called for any target which needs to schedule tasks, and this method should be called before any scheduler API usage.
+     * This method will add a `_id` property if it doesn't exist.
+     * !zh 任何需要用 Scheduler 管理任务的对象主体都应该调用这个方法，并且应该在调用任何 Scheduler API 之前调用这个方法。
+     * 这个方法会给对象添加一个 `_id` 属性，如果这个属性不存在的话。
+     * @method enableForTarget
+     * @param {Object} target
+     */
+    enableForTarget: function (target) {
+        if (!target._id) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+            }
+            else {
+                target._id = idGenerater.getNewId();
+            }
+        }
+    },
+
     /**
      * !#en
      * Modifies the time of all scheduled callbacks.<br/>
@@ -365,7 +380,7 @@ cc.Scheduler = cc._Class.extend({
      * @method setTimeScale
      * @param {Number} timeScale
      */
-    setTimeScale:function (timeScale) {
+    setTimeScale: function (timeScale) {
         this._timeScale = timeScale;
     },
 
@@ -375,7 +390,7 @@ cc.Scheduler = cc._Class.extend({
      * @method getTimeScale
      * @return {Number}
      */
-    getTimeScale:function () {
+    getTimeScale: function () {
         return this._timeScale;
     },
 
@@ -385,7 +400,7 @@ cc.Scheduler = cc._Class.extend({
      * @method update
      * @param {Number} dt delta time
      */
-    update:function (dt) {
+    update: function (dt) {
         this._updateHashLocked = true;
         if(this._timeScale !== 1)
             dt *= this._timeScale;
@@ -394,20 +409,20 @@ cc.Scheduler = cc._Class.extend({
 
         for(i=0,list=this._updatesNegList, len = list.length; i<len; i++){
             entry = list[i];
-            if(!entry.paused && !entry.markedForDeletion)
-                entry.trigger(dt);
+            if (!entry.paused && !entry.markedForDeletion)
+                entry.target.update(dt);
         }
 
         for(i=0, list=this._updates0List, len=list.length; i<len; i++){
             entry = list[i];
             if (!entry.paused && !entry.markedForDeletion)
-                entry.trigger(dt);
+                entry.target.update(dt);
         }
 
         for(i=0, list=this._updatesPosList, len=list.length; i<len; i++){
             entry = list[i];
             if (!entry.paused && !entry.markedForDeletion)
-                entry.trigger(dt);
+                entry.target.update(dt);
         }
 
         // Iterate over all the custom selectors
@@ -428,13 +443,11 @@ cc.Scheduler = cc._Class.extend({
                 }
             }
 
-            // elt, at this moment, is still valid
-            // so it is safe to ask this here (issue #490)
-            //elt = elt.hh.next;
-
             // only delete currentTarget if no actions were scheduled during the cycle (issue #481)
-            if (this._currentTargetSalvaged && this._currentTarget.timers.length === 0)
+            if (this._currentTargetSalvaged && this._currentTarget.timers.length === 0) {
                 this._removeHashElement(this._currentTarget);
+                --i;
+            }
         }
 
         // delete all updates that are marked for deletion
@@ -470,7 +483,7 @@ cc.Scheduler = cc._Class.extend({
     /**
      * !#en
      * <p>
-     *   The scheduled method will be called every 'interval' seconds.</br>
+     *   The scheduled method will be called every 'interval' seconds.<br/>
      *   If paused is YES, then it won't be called until it is resumed.<br/>
      *   If 'interval' is 0, it will be called every frame, but if so, it recommended to use 'scheduleUpdateForTarget:' instead.<br/>
      *   If the callback function is already scheduled, then only the interval parameter will be updated without re-scheduling it again.<br/>
@@ -478,41 +491,26 @@ cc.Scheduler = cc._Class.extend({
      *   delay is the amount of time the action will wait before it'll start<br/>
      * </p>
      * !#zh
-     * 指定回调函数，调用对象等信息来添加一个新的定时器。</br>
-     * 当时间间隔达到指定值时，设置的回调函数将会被调用。</br>
-     * 如果 paused 值为 true，那么直到 resume 被调用才开始计时。</br>
+     * 指定回调函数，调用对象等信息来添加一个新的定时器。<br/>
+     * 如果 paused 值为 true，那么直到 resume 被调用才开始计时。<br/>
+     * 当时间间隔达到指定值时，设置的回调函数将会被调用。<br/>
      * 如果 interval 值为 0，那么回调函数每一帧都会被调用，但如果是这样，
-     * 建议使用 scheduleUpdateForTarget 代替。</br>
+     * 建议使用 scheduleUpdateForTarget 代替。<br/>
      * 如果回调函数已经被定时器使用，那么只会更新之前定时器的时间间隔参数，不会设置新的定时器。<br/>
      * repeat 值可以让定时器触发 repeat + 1 次，使用 cc.macro.REPEAT_FOREVER
      * 可以让定时器一直循环触发。<br/>
      * delay 值指定延迟时间，定时器会在延迟指定的时间之后开始计时。
-     * @method scheduleCallbackForTarget
-     * @deprecated since v3.4 please use .schedule
-     * @param {Object} target
-     * @param {Function} callback_fn
-     * @param {Number} interval
-     * @param {Number} repeat
-     * @param {Number} delay
-     * @param {Boolean} paused
-     * @example {@link utils/api/engine/docs/cocos2d/core/CCScheduler/scheduleCallbackForTarget.js}
-     */
-    scheduleCallbackForTarget: function(target, callback_fn, interval, repeat, delay, paused){
-        //cc.log("scheduleCallbackForTarget is deprecated. Please use schedule.");
-        this.schedule(callback_fn, target, interval, repeat, delay, paused);
-    },
-
-    /**
-     * !#en The schedule
-     * !#zh 定时器
      * @method schedule
      * @param {Function} callback
      * @param {Object} target
      * @param {Number} interval
-     * @param {Number} repeat
-     * @param {Number} delay
+     * @param {Number} [repeat=cc.macro.REPEAT_FOREVER]
+     * @param {Number} [delay=0]
      * @param {Boolean} paused
-     * @example {@link utils/api/engine/docs/cocos2d/core/CCScheduler/schedule.js}
+     * @example {@link cocos2d/core/CCScheduler/schedule.js}
+     * @typescript
+     * schedule(callback: Function, target: any, interval: number, repeat: number, delay: number, paused?: boolean): void
+     * schedule(callback: Function, target: any, interval: number, paused?: boolean): void
      */
     schedule: function (callback, target, interval, repeat, delay, paused) {
         'use strict';
@@ -523,24 +521,32 @@ cc.Scheduler = cc._Class.extend({
         }
         //selector, target, interval, repeat, delay, paused
         //selector, target, interval, paused
-        if(arguments.length === 4 || arguments.length === 5){
-            paused = repeat;
+        if (arguments.length === 4 || arguments.length === 5) {
+            paused = !!repeat;
             repeat = cc.macro.REPEAT_FOREVER;
             delay = 0;
         }
 
-        cc.assert(target, cc._LogInfos.Scheduler_scheduleCallbackForTarget_3);
+        cc.assertID(target, 1502);
 
-        var instanceId = getTargetId(target);
-        var element = this._hashForTimers[instanceId];
-
-        if(!element){
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
+        var element = this._hashForTimers[targetId];
+        if (!element) {
             // Is this the 1st element ? Then set the pause level to all the callback_fns of this target
-            element = new HashTimerEntry(null, target, 0, null, null, paused, null);
+            element = HashTimerEntry.get(null, target, 0, null, null, paused);
             this._arrayForTimers.push(element);
-            this._hashForTimers[instanceId] = element;
-        }else{
-            cc.assert(element.paused === paused, '');
+            this._hashForTimers[targetId] = element;
+        } else if (element.paused !== paused) {
+            cc.warnID(1511);
         }
 
         var timer, i;
@@ -548,48 +554,85 @@ cc.Scheduler = cc._Class.extend({
             element.timers = [];
         }
         else {
-            for (i = 0; i < element.timers.length; ++i){
-                timer =element.timers[i];
-                if (timer && callback === timer.getSelector()){
-                    cc.log('CCScheduler#scheduleSelector. Selector already scheduled. Updating interval from: %.4f to %.4f', timer.getInterval(), interval);
-                    timer.setInterval(interval);
+            for (i = 0; i < element.timers.length; ++i) {
+                timer = element.timers[i];
+                if (timer && callback === timer._callback) {
+                    cc.logID(1507, timer.getInterval(), interval);
+                    timer._interval = interval;
                     return;
                 }
             }
         }
-        
-        timer = new TimerTargetSelector();
-        timer.initWithSelector(this, target, callback, interval, repeat, delay);
+
+        timer = CallbackTimer.get();
+        timer.initWithCallback(this, callback, target, interval, repeat, delay);
         element.timers.push(timer);
+
+        if (this._currentTarget === element && this._currentTargetSalvaged) {
+            this._currentTargetSalvaged = false;
+        }
     },
 
     /**
      * !#en
      * Schedules the update callback for a given target,
-     * the callback will be invoked every frame after schedule started.
+     * During every frame after schedule started, the "update" function of target will be invoked.
      * !#zh
      * 使用指定的优先级为指定的对象设置 update 定时器。
-     * update 定时器每一帧都会被触发。优先级的值越低，定时器被触发的越早。
+     * update 定时器每一帧都会被触发，触发时自动调用指定对象的 "update" 函数。
+     * 优先级的值越低，定时器被触发的越早。
      * @method scheduleUpdate
      * @param {Object} target
      * @param {Number} priority
      * @param {Boolean} paused
-     * @param {Function} updateFunc
      */
-    scheduleUpdate: function(target, priority, paused, updateFunc){
-        updateFunc = updateFunc || target.update;
-        this._schedulePerFrame(updateFunc, target, priority, paused);
-    },
-
-    _getUnscheduleMark: function(key, timer){
-        //key, callback, selector
-        switch (typeof key){
-            case "number":
-            case "string":
-                return key === timer.getKey();
-            case "function":
-                return key === timer._callback || key === timer.getSelector();
+    scheduleUpdate: function(target, priority, paused) {
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
         }
+        var hashElement = this._hashForUpdates[targetId];
+        if (hashElement && hashElement.entry){
+            // check if priority has changed
+            if (hashElement.entry.priority !== priority){
+                if (this._updateHashLocked){
+                    cc.logID(1506);
+                    hashElement.entry.markedForDeletion = false;
+                    hashElement.entry.paused = paused;
+                    return;
+                }else{
+                    // will be added again outside if (hashElement).
+                    this.unscheduleUpdate(target);
+                }
+            }else{
+                hashElement.entry.markedForDeletion = false;
+                hashElement.entry.paused = paused;
+                return;
+            }
+        }
+
+        var listElement = ListEntry.get(target, priority, paused, false);
+        var ppList;
+
+        // most of the updates are going to be 0, that's way there
+        // is an special list for updates with priority 0
+        if (priority === 0) {
+            ppList = this._updates0List;
+            this._appendIn(ppList, listElement);
+        }
+        else {
+            ppList = priority < 0 ? this._updatesNegList : this._updatesPosList;
+            this._priorityIn(ppList, listElement, priority);
+        }
+
+        //update hash entry for quick access
+        this._hashForUpdates[targetId] = HashUpdateEntry.get(ppList, listElement, target, null);
     },
 
     /**
@@ -597,31 +640,40 @@ cc.Scheduler = cc._Class.extend({
      * Unschedules a callback for a callback and a given target.
      * If you want to unschedule the "update", use `unscheduleUpdate()`
      * !#zh
-     * 根据指定的回调函数和调用对象。
+     * 取消指定对象定时器。
      * 如果需要取消 update 定时器，请使用 unscheduleUpdate()。
      * @method unschedule
      * @param {Function} callback The callback to be unscheduled
      * @param {Object} target The target bound to the callback.
      */
-    unschedule: function(callback, target){
-        //key, target
-        //selector, target
-        //callback, target - This is in order to increase compatibility
+    unschedule: function (callback, target) {
+        //callback, target
 
         // explicity handle nil arguments when removing an object
         if (!target || !callback)
             return;
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
 
-        var self = this, element = self._hashForTimers[getTargetId(target)];
+        var self = this, element = self._hashForTimers[targetId];
         if (element) {
             var timers = element.timers;
             for(var i = 0, li = timers.length; i < li; i++){
                 var timer = timers[i];
-                if (this._getUnscheduleMark(callback, timer)) {
+                if (callback === timer._callback) {
                     if ((timer === element.currentTimer) && (!element.currentTimerSalvaged)) {
                         element.currentTimerSalvaged = true;
                     }
                     timers.splice(i, 1);
+                    CallbackTimer.put(timer);
                     //update timerIndex in case we are in tick;, looping over the actions
                     if (element.timerIndex >= i) {
                         element.timerIndex--;
@@ -646,16 +698,25 @@ cc.Scheduler = cc._Class.extend({
      * @method unscheduleUpdate
      * @param {Object} target The target to be unscheduled.
      */
-    unscheduleUpdate: function(target){
-        if (target == null)
+    unscheduleUpdate: function (target) {
+        if (!target)
             return;
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
 
-        var element = this._hashForUpdates[getTargetId(target)];
-
-        if (element){
-            if (this._updateHashLocked){
+        var element = this._hashForUpdates[targetId];
+        if (element) {
+            if (this._updateHashLocked) {
                 element.entry.markedForDeletion = true;
-            }else{
+            } else {
                 this._removeUpdateFromHash(element.entry);
             }
         }
@@ -669,22 +730,34 @@ cc.Scheduler = cc._Class.extend({
      * @method unscheduleAllForTarget
      * @param {Object} target The target to be unscheduled.
      */
-    unscheduleAllForTarget: function(target){
+    unscheduleAllForTarget: function (target) {
         // explicit nullptr handling
-        if (target == null){
+        if (!target){
             return;
+        }
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
         }
 
         // Custom Selectors
-        var element = this._hashForTimers[getTargetId(target)];
-
-        if (element){
-            if (element.timers.indexOf(element.currentTimer) > -1
-                && (! element.currentTimerSalvaged)){
+        var element = this._hashForTimers[targetId];
+        if (element) {
+            var timers = element.timers;
+            if (timers.indexOf(element.currentTimer) > -1 && 
+                (!element.currentTimerSalvaged)) {
                 element.currentTimerSalvaged = true;
             }
-            //        ccArrayRemoveAllObjects(element.timers);
-            element.timers.length = 0;
+            for (var i = 0, l = timers.length; i < l; i++) {
+                CallbackTimer.put(timers[i]);
+            }
+            timers.length = 0;
 
             if (this._currentTarget === element){
                 this._currentTargetSalvaged = true;
@@ -775,23 +848,34 @@ cc.Scheduler = cc._Class.extend({
     isScheduled: function(callback, target){
         //key, target
         //selector, target
-        cc.assert(callback, "Argument callback must not be empty");
-        cc.assert(target, "Argument target must be non-nullptr");
+        cc.assertID(callback, 1508);
+        cc.assertID(target, 1509);
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
+        
+        var element = this._hashForTimers[targetId];
 
-        var element = this._hashForUpdates[getTargetId(target)];
-
-        if (!element){
+        if (!element) {
             return false;
         }
 
         if (element.timers == null){
             return false;
-        }else{
+        }
+        else {
             var timers = element.timers;
-            for (var i = 0; i < timers.length; ++i){
+            for (var i = 0; i < timers.length; ++i) {
                 var timer =  timers[i];
 
-                if (callback === timer.getKey()){
+                if (callback === timer._callback){
                     return true;
                 }
             }
@@ -808,7 +892,7 @@ cc.Scheduler = cc._Class.extend({
      * 不要调用这个方法，除非你知道你正在做什么。
      * @method pauseAllTargets
      */
-    pauseAllTargets:function () {
+    pauseAllTargets: function () {
         return this.pauseAllTargetsWithMinPriority(cc.Scheduler.PRIORITY_SYSTEM);
     },
 
@@ -822,7 +906,7 @@ cc.Scheduler = cc._Class.extend({
      * @method pauseAllTargetsWithMinPriority
      * @param {Number} minPriority
      */
-    pauseAllTargetsWithMinPriority:function (minPriority) {
+    pauseAllTargetsWithMinPriority: function (minPriority) {
         var idsWithSelectors = [];
 
         var self = this, element, locArrayForTimers = self._arrayForTimers;
@@ -842,7 +926,7 @@ cc.Scheduler = cc._Class.extend({
                 entry = this._updatesNegList[i];
                 if (entry) {
                     if(entry.priority >= minPriority){
-						entry.paused = true;
+                        entry.paused = true;
                         idsWithSelectors.push(entry.target);
                     }
                 }
@@ -853,7 +937,7 @@ cc.Scheduler = cc._Class.extend({
             for(i=0; i<this._updates0List.length; i++){
                 entry = this._updates0List[i];
                 if (entry) {
-					entry.paused = true;
+                    entry.paused = true;
                     idsWithSelectors.push(entry.target);
                 }
             }
@@ -863,7 +947,7 @@ cc.Scheduler = cc._Class.extend({
             entry = this._updatesPosList[i];
             if (entry) {
                 if(entry.priority >= minPriority){
-					entry.paused = true;
+                    entry.paused = true;
                     idsWithSelectors.push(entry.target);
                 }
             }
@@ -882,7 +966,7 @@ cc.Scheduler = cc._Class.extend({
      * @method resumeTargets
      * @param {Array} targetsToResume
      */
-    resumeTargets:function (targetsToResume) {
+    resumeTargets: function (targetsToResume) {
         if (!targetsToResume)
             return;
 
@@ -903,20 +987,28 @@ cc.Scheduler = cc._Class.extend({
      * @method pauseTarget
      * @param {Object} target
      */
-    pauseTarget:function (target) {
-
-        cc.assert(target, cc._LogInfos.Scheduler.pauseTarget);
+    pauseTarget: function (target) {
+        cc.assertID(target, 1503);
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
 
         //customer selectors
         var self = this, 
-            instanceId = getTargetId(target),
-            element = self._hashForTimers[instanceId];
+            element = self._hashForTimers[targetId];
         if (element) {
             element.paused = true;
         }
 
         //update callback
-        var elementUpdate = self._hashForUpdates[instanceId];
+        var elementUpdate = self._hashForUpdates[targetId];
         if (elementUpdate) {
             elementUpdate.entry.paused = true;
         }
@@ -934,22 +1026,28 @@ cc.Scheduler = cc._Class.extend({
      * @method resumeTarget
      * @param {Object} target
      */
-    resumeTarget:function (target) {
-
-        cc.assert(target, cc._LogInfos.Scheduler.resumeTarget);
+    resumeTarget: function (target) {
+        cc.assertID(target, 1504);
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
 
         // custom selectors
         var self = this,
-            instanceId = getTargetId(target),
-            element = self._hashForTimers[instanceId];
-
+            element = self._hashForTimers[targetId];
         if (element) {
             element.paused = false;
         }
 
         //update callback
-        var elementUpdate = self._hashForUpdates[instanceId];
-
+        var elementUpdate = self._hashForUpdates[targetId];
         if (elementUpdate) {
             elementUpdate.entry.paused = false;
         }
@@ -962,120 +1060,31 @@ cc.Scheduler = cc._Class.extend({
      * @param {Object} target
      * @return {Boolean}
      */
-    isTargetPaused:function (target) {
-
-        cc.assert(target, cc._LogInfos.Scheduler.isTargetPaused);
+    isTargetPaused: function (target) {
+        cc.assertID(target, 1505);
+        var targetId = target._id;
+        if (!targetId) {
+            if (target.__instanceId) {
+                cc.warnID(1513);
+                targetId = target._id = target.__instanceId;
+            }
+            else {
+                cc.errorID(1510);
+            }
+        }
 
         // Custom selectors
-        var instanceId = getTargetId(target),
-            element = this._hashForTimers[instanceId];
+        var element = this._hashForTimers[targetId];
         if (element) {
             return element.paused;
         }
-        var elementUpdate = this._hashForUpdates[instanceId];
+        var elementUpdate = this._hashForUpdates[targetId];
         if (elementUpdate) {
             return elementUpdate.entry.paused;
         }
         return false;
     },
-
-    /**
-     * !#en
-     * Schedules the 'update' callback_fn for a given target with a given priority.<br/>
-     * The 'update' callback_fn will be called every frame.<br/>
-     * The lower the priority, the earlier it is called.
-     * !#zh
-     * 为指定对象设置 update 定时器。<br/>
-     * update 定时器每一帧都会被调用。<br/>
-     * 优先级的值越低，越早被调用。
-     * @method scheduleUpdateForTarget
-     * @deprecated since v3.4 please use .scheduleUpdate
-     * @param {Object} target
-     * @param {Number} priority
-     * @param {Boolean} paused
-     * @example {@link utils/api/engine/docs/cocos2d/core/CCScheduler/scheduleUpdateForTarget.js}
-     */
-    scheduleUpdateForTarget: function(target, priority, paused){
-        //cc.log("scheduleUpdateForTarget is deprecated. Please use scheduleUpdate.");
-        this.scheduleUpdate(target, priority, paused);
-    },
-
-    /**
-     * !#en
-     * Unschedule a callback function for a given target.<br/>
-     * If you want to unschedule the "update", use unscheduleUpdateForTarget.
-     * !#zh
-     * 根据指定的回调函数和调用对象对象取消相应的定时器。<br/>
-     * 如果需要取消 update 定时器，请使用 unscheduleUpdateForTarget()。
-     * @method unscheduleCallbackForTarget
-     * @deprecated since v3.4 please use .unschedule
-     * @param {Object} target
-     * @param {Function} callback - callback[Function] or key[String]
-     * @example {@link utils/api/engine/docs/cocos2d/core/CCScheduler/unscheduleCallbackForTarget.js}
-     */
-    unscheduleCallbackForTarget:function (target, callback) {
-        //cc.log("unscheduleCallbackForTarget is deprecated. Please use unschedule.");
-        this.unschedule(callback, target);
-    },
-
-    /**
-     * !#en Unschedules the update callback function for a given target.
-     * !#zh 取消指定对象的所有定时器。
-     * @method unscheduleUpdateForTarget
-     * @param {Object} target
-     * @deprecated since v3.4 please use .unschedule
-     * @example {@link utils/api/engine/docs/cocos2d/core/CCScheduler/unscheduleUpdateForTarget.js}
-     */
-    unscheduleUpdateForTarget:function (target) {
-        //cc.log("unscheduleUpdateForTarget is deprecated. Please use unschedule.");
-        this.unscheduleUpdate(target);
-    },
-
-    /**
-     * !#en
-     * Unschedules all function callbacks for a given target.<br/>
-     * This also includes the "update" callback function.
-     * !#zh 取消指定对象的所有定时器，包括 update 定时器。
-     * @method unscheduleAllCallbacksForTarget
-     * @deprecated since v3.4 please use unscheduleAllForTarget
-     * @param {Object} target
-     */
-    unscheduleAllCallbacksForTarget: function(target){
-        //cc.log("unscheduleAllCallbacksForTarget is deprecated. Please use unscheduleAll.");
-        this.unscheduleAllForTarget(target);
-    },
-
-    /**
-     * !#en
-     * Unschedules all function callbacks from all targets. <br/>
-     * You should NEVER call this method, unless you know what you are doing.
-     * !#zh
-     * 取消所有对象的所有定时器。<br/>
-     * 不要调用这个方法，除非你知道你正在做什么。
-     * @method unscheduleAllCallbacks
-     * @deprecated since v3.4 please use .unscheduleAllWithMinPriority
-     */
-    unscheduleAllCallbacks: function(){
-        //cc.log("unscheduleAllCallbacks is deprecated. Please use unscheduleAll.");
-        this.unscheduleAllWithMinPriority(cc.Scheduler.PRIORITY_SYSTEM);
-    },
-
-    /**
-     * !#en
-     * Unschedules all function callbacks from all targets with a minimum priority.<br/>
-     * You should only call this with kCCPriorityNonSystemMin or higher.
-     * !#zh
-     * 取消所有优先级的值大于指定优先级的所有对象的所有定时器。<br/>
-     * 你应该只暂停优先级的值大于 PRIORITY_NON_SYSTEM_MIN 的定时器。
-     * @method unscheduleAllCallbacksWithMinPriority
-     * @deprecated since v3.4 please use .unscheduleAllWithMinPriority
-     * @param {Number} minPriority
-     */
-    unscheduleAllCallbacksWithMinPriority:function (minPriority) {
-        //cc.log("unscheduleAllCallbacksWithMinPriority is deprecated. Please use unscheduleAllWithMinPriority.");
-        this.unscheduleAllWithMinPriority(minPriority);
-    }
-});
+};
 
 /**
  * !#en Priority level reserved for system services.
@@ -1084,7 +1093,7 @@ cc.Scheduler = cc._Class.extend({
  * @type {Number}
  * @static
  */
-cc.Scheduler.PRIORITY_SYSTEM = (-2147483647 - 1);
+cc.Scheduler.PRIORITY_SYSTEM = 1 << 31;
 
 /**
  * !#en Minimum priority level for user scheduling.
@@ -1094,3 +1103,5 @@ cc.Scheduler.PRIORITY_SYSTEM = (-2147483647 - 1);
  * @static
  */
 cc.Scheduler.PRIORITY_NON_SYSTEM = cc.Scheduler.PRIORITY_SYSTEM + 1;
+
+module.exports = cc.Scheduler;

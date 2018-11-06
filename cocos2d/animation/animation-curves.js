@@ -1,8 +1,34 @@
+/****************************************************************************
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated engine source code (the "Software"), a limited,
+ worldwide, royalty-free, non-assignable, revocable and non-exclusive license
+ to use Cocos Creator solely to develop games on your target platforms. You shall
+ not use Cocos Creator software for developing other software or tools that's
+ used for developing games. You are not granted to publish, distribute,
+ sublicense, and/or sell copies of Cocos Creator.
+
+ The software or tools in this License Agreement are licensed, not sold.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ ****************************************************************************/
+
 
 var bezierByTime = require('./bezier').bezierByTime;
 
-var binarySearch = require('./binary-search');
+var binarySearch = require('../core/utils/binary-search').binarySearchEpsilon;
 var WrapModeMask = require('./types').WrapModeMask;
+var WrappedInfo = require('./types').WrappedInfo;
 
 /**
  * Compute a new ratio by curve type
@@ -16,7 +42,7 @@ function computeRatioByType (ratio, type) {
             ratio = func(ratio);
         }
         else {
-            cc.error('Can\'t find easing type [' + type + ']');
+            cc.errorID(3906, type);
         }
     }
     else if (Array.isArray(type)) {
@@ -32,7 +58,7 @@ function computeRatioByType (ratio, type) {
 // 虽然叫做 AnimCurve，但除了曲线，可以保存任何类型的值。
 //
 // @class AnimCurve
-// @constructor
+//
 //
 var AnimCurve = cc.Class({
     name: 'cc.AnimCurve',
@@ -41,19 +67,48 @@ var AnimCurve = cc.Class({
     // @method sample
     // @param {number} time
     // @param {number} ratio - The normalized time specified as a number between 0.0 and 1.0 inclusive.
-    // @param {AnimationNode} animationNode
+    // @param {AnimationState} state
     //
-    sample: function (time, ratio, animationNode) {},
+    sample: function (time, ratio, state) {},
 
-    onTimeChangedManually: function () {}
+    onTimeChangedManually: undefined
 });
 
+/**
+ * 当每两帧之前的间隔都一样的时候可以使用此函数快速查找 index
+ */
+function quickFindIndex (ratios, ratio) {
+    var length = ratios.length - 1;
+
+    if (length === 0) return 0;
+
+    var start = ratios[0];
+    if (ratio < start) return 0;
+
+    var end = ratios[length];
+    if (ratio > end) return length;
+
+    ratio = (ratio - start) / (end - start);
+
+    var eachLength = 1 / length;
+    var index = ratio / eachLength;
+    var floorIndex = index | 0;
+    var EPSILON = 1e-6;
+
+    if ((index - floorIndex) < EPSILON) {
+        return floorIndex;
+    }
+    else if ((floorIndex + 1 - index) < EPSILON) {
+        return floorIndex + 1;
+    }
+
+    return ~(floorIndex + 1);
+}
 
 //
-// 区别于 SampledAnimCurve。
 //
 // @class DynamicAnimCurve
-// @constructor
+//
 // @extends AnimCurve
 //
 var DynamicAnimCurve = cc.Class({
@@ -93,36 +148,9 @@ var DynamicAnimCurve = cc.Class({
         subProps: null
     },
 
-    _calcValue: function (frameIndex, ratio) {
-        var values = this.values;
-        var fromVal = values[frameIndex - 1];
-        var toVal = values[frameIndex];
-
-        var value;
-        // lerp
-        if (typeof fromVal === 'number') {
-            value = fromVal + (toVal - fromVal) * ratio;
-        }
-        else {
-            if (fromVal && fromVal.lerp) {
-                value = fromVal.lerp(toVal, ratio);
-            }
-            else {
-                // no linear lerp function, just return last frame
-                value = fromVal;
-            }
-        }
-
-        return value;
-    },
-
-    _applyValue: function (target, prop, value) {
-        target[prop] = value;
-    },
-
     _findFrameIndex: binarySearch,
 
-    sample: function (time, ratio, animationNode) {
+    sample: function (time, ratio, state) {
         var values = this.values;
         var ratios = this.ratios;
         var frameCount = ratios.length;
@@ -145,14 +173,35 @@ var DynamicAnimCurve = cc.Class({
                 value = values[frameCount - 1];
             }
             else {
-                var fromRatio = ratios[index - 1];
-                var toRatio = ratios[index];
-                var type = this.types[index - 1];
-                var ratioBetweenFrames = (ratio - fromRatio) / (toRatio - fromRatio);
+                var fromVal = values[index - 1];
 
-                ratioBetweenFrames = computeRatioByType(ratioBetweenFrames, type);
+                var isNumber = typeof fromVal === 'number';
+                var canLerp = fromVal && fromVal.lerp;
 
-                value = this._calcValue(index, ratioBetweenFrames);
+                if (!isNumber && !canLerp) {
+                    value = fromVal;
+                }
+                else {
+                    var fromRatio = ratios[index - 1];
+                    var toRatio = ratios[index];
+                    var type = this.types[index - 1];
+                    var ratioBetweenFrames = (ratio - fromRatio) / (toRatio - fromRatio);
+
+                    if (type) {
+                        ratioBetweenFrames = computeRatioByType(ratioBetweenFrames, type);
+                    }
+
+                    // calculate value
+                    var toVal = values[index];
+
+                    // lerp
+                    if (isNumber) {
+                        value = fromVal + (toVal - fromVal) * ratioBetweenFrames;
+                    }
+                    else if (canLerp) {
+                        value = fromVal.lerp(toVal, ratioBetweenFrames);
+                    }
+                }
             }
         }
         else {
@@ -178,7 +227,7 @@ var DynamicAnimCurve = cc.Class({
             var propName = subProps[subProps.length - 1];
 
             if (subProp) {
-                this._applyValue(subProp, propName, value);
+                subProp[propName] = value;
             }
             else {
                 return;
@@ -188,7 +237,7 @@ var DynamicAnimCurve = cc.Class({
         }
 
         // apply value
-        this._applyValue(this.target, this.prop, value);
+        this.target[this.prop] = value;
     }
 });
 
@@ -200,50 +249,9 @@ DynamicAnimCurve.Bezier = function (controlPoints) {
 
 
 /**
- * SampledAnimCurve, 这里面的数值需要是已经都预先sample好了的,
- * 所以 SampledAnimCurve 中查找 frame index 的速度会非常快
- *
- * @class SampledAnimCurve
- * @private
- * @constructor
- * @extends DynamicAnimCurve
- */
-var SampledAnimCurve = cc.Class({
-    name: 'cc.SampledAnimCurve',
-    extends: DynamicAnimCurve,
-
-    _findFrameIndex: function (ratios, ratio) {
-        var length = ratios.length - 1;
-
-        if (length === 0) return 0;
-
-        var start = ratios[0];
-        if (ratio < start) return 0;
-
-        var end = ratios[length];
-        if (ratio > end) return length;
-
-        ratio = (ratio - start) / (end - start);
-
-        var eachLength = 1 / length;
-        var index = ratio / eachLength;
-        var floorIndex = index | 0;
-        var EPSILON = 1e-6;
-
-        if ((index - floorIndex) < EPSILON) {
-            return floorIndex;
-        }
-
-        return ~(floorIndex + 1);
-    }
-});
-
-
-
-/**
  * Event information,
  * @class EventInfo
- * @constructor
+ *
  */
 var EventInfo = function () {
     this.events = [];
@@ -264,7 +272,7 @@ EventInfo.prototype.add = function (func, params) {
 /**
  *
  * @class EventAnimCurve
- * @constructor
+ *
  * @extends AnimCurve
  */
 var EventAnimCurve = cc.Class({
@@ -291,13 +299,15 @@ var EventAnimCurve = cc.Class({
          */
         events: [],
 
-        /**
-         * Last wrapped info
-         * @property _lastWrappedInfo
-         * @type {Object}
-         * @default null
-         */
-        _lastWrappedInfo: null
+        _wrappedInfo: {
+            default: function () {
+                return new WrappedInfo();
+            }
+        },
+
+        _lastWrappedInfo: null,
+
+        _ignoreIndex: NaN
     },
 
     _wrapIterations: function (iterations) {
@@ -305,10 +315,10 @@ var EventAnimCurve = cc.Class({
         return iterations | 0;
     },
 
-    sample: function (time, ratio, animationNode) {
+    sample: function (time, ratio, state) {
         var length = this.ratios.length;
 
-        var currentWrappedInfo = animationNode.getWrappedInfo(animationNode.time);
+        var currentWrappedInfo = state.getWrappedInfo(state.time, this._wrappedInfo);
         var direction = currentWrappedInfo.direction;
         var currentIndex = binarySearch(this.ratios, currentWrappedInfo.ratio);
         if (currentIndex < 0) {
@@ -318,21 +328,25 @@ var EventAnimCurve = cc.Class({
             if (direction < 0) currentIndex += 1;
         }
 
-        var lastWrappedInfo = this._lastWrappedInfo;
+        if (this._ignoreIndex !== currentIndex) {
+            this._ignoreIndex = NaN;
+        }
 
         currentWrappedInfo.frameIndex = currentIndex;
-        this._lastWrappedInfo = currentWrappedInfo;
 
-        if (!lastWrappedInfo) {
+        if (!this._lastWrappedInfo) {
             this._fireEvent(currentIndex);
+            this._lastWrappedInfo = new WrappedInfo(currentWrappedInfo);
             return;
         }
 
-        var lastIndex = lastWrappedInfo.frameIndex;
-        var wrapMode = animationNode.wrapMode;
-
+        var wrapMode = state.wrapMode;
         var currentIterations = this._wrapIterations(currentWrappedInfo.iterations);
+
+        var lastWrappedInfo = this._lastWrappedInfo;
         var lastIterations = this._wrapIterations(lastWrappedInfo.iterations);
+        var lastIndex = lastWrappedInfo.frameIndex;
+        var lastDirection = lastWrappedInfo.direction;
 
         var interationsChanged = lastIterations !== -1 && currentIterations !== lastIterations;
 
@@ -340,7 +354,7 @@ var EventAnimCurve = cc.Class({
             this._fireEvent(0);
         }
         else if (lastIndex !== currentIndex || interationsChanged) {
-            direction = lastWrappedInfo.direction;
+            direction = lastDirection;
 
             do {
                 if (lastIndex !== currentIndex) {
@@ -371,16 +385,23 @@ var EventAnimCurve = cc.Class({
 
                 lastIndex += direction;
 
-                this._fireEvent(lastIndex);
+                cc.director.getAnimationManager().pushDelayEvent(this, '_fireEvent', [lastIndex]);
             } while (lastIndex !== currentIndex && lastIndex > -1 && lastIndex < length);
         }
+
+        this._lastWrappedInfo.set(currentWrappedInfo);
     },
 
     _fireEvent: function (index) {
-        if (index < 0 || index >= this.events.length) return;
+        if (index < 0 || index >= this.events.length || this._ignoreIndex === index) return;
 
         var eventInfo = this.events[index];
         var events = eventInfo.events;
+        
+        if ( !this.target.isValid ) { 
+            return; 
+        }
+        
         var components = this.target._components;
 
         for (var i = 0;  i < events.length; i++) {
@@ -396,23 +417,38 @@ var EventAnimCurve = cc.Class({
         }
     },
 
-    onTimeChangedManually: function () {
+    onTimeChangedManually: function (time, state) {
         this._lastWrappedInfo = null;
+        this._ignoreIndex = NaN;
+
+        var info = state.getWrappedInfo(time, this._wrappedInfo);
+        var direction = info.direction;
+        var frameIndex = binarySearch(this.ratios, info.ratio);
+
+        // only ignore when time not on a frame index
+        if (frameIndex < 0) {
+            frameIndex = ~frameIndex - 1;
+
+            // if direction is inverse, then increase index
+            if (direction < 0) frameIndex += 1;
+
+            this._ignoreIndex = frameIndex;
+        }
     }
 });
 
 
 if (CC_TEST) {
     cc._Test.DynamicAnimCurve = DynamicAnimCurve;
-    cc._Test.SampledAnimCurve = SampledAnimCurve;
     cc._Test.EventAnimCurve = EventAnimCurve;
+    cc._Test.quickFindIndex = quickFindIndex;
 }
 
 module.exports = {
     AnimCurve: AnimCurve,
     DynamicAnimCurve: DynamicAnimCurve,
-    SampledAnimCurve: SampledAnimCurve,
     EventAnimCurve: EventAnimCurve,
     EventInfo: EventInfo,
-    computeRatioByType: computeRatioByType
+    computeRatioByType: computeRatioByType,
+    quickFindIndex: quickFindIndex
 };

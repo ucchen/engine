@@ -46,13 +46,13 @@ function Callback(callbackFunction_opt) {
 
     var wrapper = function () {
         if (!enabled) {
-            var message = callbackName_ + ' can be called only after enable()'
+            var message = callbackName_ + ' can be called only after enable()';
             QUnit.push(false, message, message, msgWhenDisabled_);
             return;
         }
         ++wrapper.calledCount;
         if (callbackFunction_) {
-            callbackFunction_.apply(this, arguments);
+            return callbackFunction_.apply(this, arguments);
         }
     };
 

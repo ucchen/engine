@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,6 +23,12 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
  ****************************************************************************/
+
+const macro = require('../platform/CCMacro');
+const RenderComponent = require('./CCRenderComponent');
+const renderEngine = require('../renderer/render-engine');
+const RenderFlow = require('../renderer/render-flow');
+const SpriteMaterial = renderEngine.SpriteMaterial;
 
 /**
  * !#en Enum for text alignment.
@@ -43,7 +50,7 @@
  * !#zh 文本内容右边对齐。
  * @property {Number} RIGHT
  */
-var HorizontalAlign = cc.TextAlignment;
+const HorizontalAlign = macro.TextAlignment;
 
 /**
  * !#en Enum for vertical text alignment.
@@ -65,7 +72,7 @@ var HorizontalAlign = cc.TextAlignment;
  * !#zh 文本底部对齐。
  * @property {Number} BOTTOM
  */
-var VerticalAlign = cc.VerticalTextAlignment;
+const VerticalAlign = macro.VerticalTextAlignment;
 
 /**
  * !#en Enum for Overflow.
@@ -92,7 +99,12 @@ var VerticalAlign = cc.VerticalTextAlignment;
  * !#zh 在 RESIZE_HEIGHT 模式下，只能更改文本的宽度，高度是自动改变的。
  * @property {Number} RESIZE_HEIGHT
  */
-var Overflow = _ccsg.Label.Overflow;
+const Overflow = cc.Enum({
+    NONE: 0,
+    CLAMP: 1,
+    SHRINK: 2,
+    RESIZE_HEIGHT: 3
+});
 
 /**
  * !#en Enum for font type.
@@ -114,86 +126,62 @@ var Overflow = _ccsg.Label.Overflow;
  * !#zh 系统字体
  * @property {Number} SystemFont
  */
-var LabelType = _ccsg.Label.Type;
-
-
-// Returns a function, that, as long as it continues to be invoked, will not
-// be triggered. The function will be called after it stops being called for
-// N milliseconds. If `immediate` is passed, trigger the function on the
-// leading edge, instead of the trailing.
-function debounce(func, wait, immediate) {
-    var timeout;
-    return function() {
-        var context = this, args = arguments;
-        var later = function() {
-            timeout = null;
-            if (!immediate) func.apply(context, args);
-        };
-        var callNow = immediate && !timeout;
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-        if (callNow) func.apply(context, args);
-    };
-};
-
 
 /**
  * !#en The Label Component.
  * !#zh 文字标签组件
  * @class Label
- * @extends _RendererUnderSG
+ * @extends RenderComponent
  */
-var Label = cc.Class({
+let Label = cc.Class({
     name: 'cc.Label',
-    extends: cc._RendererUnderSG,
+    extends: RenderComponent,
 
-    ctor: function() {
-        if(CC_EDITOR) {
-            this._userDefinedFontSize = 40;
+    ctor () {
+        if (CC_EDITOR) {
+            this._userDefinedFont = null;
         }
+
+        this._actualFontSize = 0;
+        this._assemblerData = null;
+
+        this._ttfTexture = null;
     },
 
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.renderers/Label',
         help: 'i18n:COMPONENT.help_url.label',
-        inspector: 'app://editor/page/inspector/label.html',
-    },
-
-    _updateSgNodeString: function() {
-        this._sgNode.setString(this.string);
-        this._updateNodeSize();
-    },
-
-    _updateSgNodeFontSize: function() {
-        if (this._sgNode) {
-            this._sgNode.setFontSize(this._fontSize);
-            this._updateNodeSize();
-        }
+        inspector: 'packages://inspector/inspectors/comps/label.js',
     },
 
     properties: {
         _useOriginalSize: true,
+        
         /**
          * !#en Content string of label.
          * !#zh 标签显示的文本内容。
          * @property {String} string
          */
+        _string: {
+            default: '',
+            formerlySerializedAs: '_N$string',
+        },
         string: {
-            default: 'Label',
-            multiline: true,
-            tooltip: 'i18n:COMPONENT.label.string',
-            notify: function () {
-                if (this._sgNode) {
-                    if (CC_EDITOR) {
-                        if(this.overflow === cc.Label.Overflow.SHRINK) {
-                            this.fontSize = this._userDefinedFontSize;
-                        }
-                        this._debouncedUpdateSgNodeString();
-                    } else {
-                        this._updateSgNodeString();
-                    }
+            get () {
+                return this._string;
+            },
+            set (value) {
+                let oldValue = this._string;
+                this._string = value.toString();
+
+                if (this.string !== oldValue) {
+                    this._updateRenderData();
                 }
-            }
+
+                this._checkStringEmpty();
+            },
+            multiline: true,
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.string'
         },
 
         /**
@@ -204,11 +192,10 @@ var Label = cc.Class({
         horizontalAlign: {
             default: HorizontalAlign.LEFT,
             type: HorizontalAlign,
-            tooltip: 'i18n:COMPONENT.label.horizontal_align',
-            notify: function () {
-                if (this._sgNode) {
-                    this._sgNode.setHorizontalAlign( this.horizontalAlign );
-                }
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.horizontal_align',
+            notify  (oldValue) {
+                if (this.horizontalAlign === oldValue) return;
+                this._updateRenderData();
             },
             animatable: false
         },
@@ -221,18 +208,14 @@ var Label = cc.Class({
         verticalAlign: {
             default: VerticalAlign.TOP,
             type: VerticalAlign,
-            tooltip: 'i18n:COMPONENT.label.vertical_align',
-            notify: function () {
-                if (this._sgNode) {
-                    this._sgNode.setVerticalAlign( this.verticalAlign );
-                }
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.vertical_align',
+            notify (oldValue) {
+                if (this.verticalAlign === oldValue) return;
+                this._updateRenderData();
             },
             animatable: false
         },
 
-        _actualFontSize: {
-            default: 40,
-        },
 
         /**
          * !#en The actual rendering font size in shrink mode
@@ -243,10 +226,7 @@ var Label = cc.Class({
             displayName: 'Actual Font Size',
             animatable: false,
             readonly: true,
-            get: function () {
-                if (this._sgNode) {
-                    this._actualFontSize = this._sgNode.getFontSize();
-                }
+            get () {
                 return this._actualFontSize;
             }
         },
@@ -258,19 +238,31 @@ var Label = cc.Class({
          * @property {Number} fontSize
          */
         fontSize: {
-            get: function(){
+            get () {
                 return this._fontSize;
             },
-            set: function(value){
+            set (value) {
+                if (this._fontSize === value) return;
+
                 this._fontSize = value;
-                if(CC_EDITOR) {
-                    this._userDefinedFontSize = value;
-                    this._debouncedUpdateFontSize();
-                } else {
-                    this._updateSgNodeFontSize();
-                }
+                this._updateRenderData();
             },
-            tooltip: 'i18n:COMPONENT.label.font_size',
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.font_size',
+        },
+
+        /**
+         * !#en Font family of label, only take effect when useSystemFont property is true.
+         * !#zh 文本字体名称, 只在 useSystemFont 属性为 true 的时候生效。
+         * @property {String} fontFamily
+         */
+        fontFamily: {
+            default: "Arial",
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.font_family',
+            notify (oldValue) {
+                if (this.fontFamily === oldValue) return;
+                this._updateRenderData();
+            },
+            animatable: false
         },
 
         _lineHeight: 40,
@@ -280,21 +272,15 @@ var Label = cc.Class({
          * @property {Number} lineHeight
          */
         lineHeight: {
-            get: function(){
-                if (this._sgNode) {
-                    this._lineHeight = this._sgNode.getLineHeight();
-                }
+            get () {
                 return this._lineHeight;
             },
-            set: function(value){
+            set (value) {
+                if (this._lineHeight === value) return;
                 this._lineHeight = value;
-
-                if (this._sgNode) {
-                    this._sgNode.setLineHeight(value);
-                    this._updateNodeSize();
-                }
+                this._updateRenderData();
             },
-            tooltip: 'i18n:COMPONENT.label.line_height',
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.line_height',
         },
         /**
          * !#en Overflow of label.
@@ -304,12 +290,10 @@ var Label = cc.Class({
         overflow: {
             default: Overflow.NONE,
             type: Overflow,
-            tooltip: 'i18n:COMPONENT.label.overflow',
-            notify: function () {
-                if (this._sgNode) {
-                    this._sgNode.setOverflow(this.overflow);
-                    this._updateNodeSize();
-                }
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.overflow',
+            notify (oldValue) {
+                if (this.overflow === oldValue) return;
+                this._updateRenderData();
             },
             animatable: false
         },
@@ -321,20 +305,17 @@ var Label = cc.Class({
          * @property {Boolean} enableWrapText
          */
         enableWrapText: {
-            get: function(){
-                if (this._sgNode) {
-                    this._enableWrapText = this._sgNode.isWrapTextEnabled();
-                }
+            get () {
                 return this._enableWrapText;
             },
-            set: function(value){
+            set (value) {
+                if (this._enableWrapText === value) return;
+
                 this._enableWrapText = value;
-                if (this._sgNode) {
-                    this._sgNode.enableWrapText(value);
-                }
+                this._updateRenderData();
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.label.wrap',
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.wrap',
         },
 
         // 这个保存了旧项目的 file 数据
@@ -343,16 +324,22 @@ var Label = cc.Class({
         /**
          * !#en The font of label.
          * !#zh 文本字体。
-         * @property {cc.Font} font
+         * @property {Font} font
          */
         font: {
-            get: function () {
+            get () {
                 return this._N$file;
             },
-            set: function (value) {
+            set (value) {
+                if (this.font === value) return;
+                
                 //if delete the font, we should change isSystemFontUsed to true
-                if(!value) {
+                if (!value) {
                     this._isSystemFontUsed = true;
+                }
+
+                if (CC_EDITOR && value) {
+                    this._userDefinedFont = value;
                 }
 
                 this._N$file = value;
@@ -360,25 +347,25 @@ var Label = cc.Class({
                 if (value && this._isSystemFontUsed)
                     this._isSystemFontUsed = false;
 
-                if (this._sgNode) {
-
-                    if ( typeof value === 'string' ) {
-                        cc.warn('Sorry, the cc.Font has been modified from Raw Asset to Asset.' +
-                            'Please load the font asset before using.');
-                    }
-
-                    var isAsset = value instanceof cc.Font;
-                    var fntRawUrl = isAsset ? value.rawUrl : '';
-                    var textureUrl = isAsset ? value.texture : '';
-                    this._sgNode.setFontFileOrFamily(fntRawUrl, textureUrl);
+                if ( typeof value === 'string' ) {
+                    cc.warnID(4000);
                 }
 
                 if (value instanceof cc.BitmapFont) {
                     this._bmFontOriginalSize = value.fontSize;
                 }
+
+                if (this._renderData) {
+                    this.destroyRenderData(this._renderData);
+                    this._renderData = null;    
+                }
+                this._fontAtlas = null;
+                this._updateAssembler();
+                this._activateMaterial(true);
+                this._updateRenderData();
             },
             type: cc.Font,
-            tooltip: 'i18n:COMPONENT.label.font',
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.font',
             animatable: false
         },
 
@@ -390,23 +377,37 @@ var Label = cc.Class({
          * @property {Boolean} isSystemFontUsed
          */
         useSystemFont: {
-            get: function(){
+            get () {
                 return this._isSystemFontUsed;
             },
-            set: function(value){
-                if(!value && this._isSystemFontUsed) return;
+            set (value) {
+                if (this._isSystemFontUsed === value) return;
+                
+                this.destroyRenderData(this._renderData);
+                this._renderData = null;
+
+                if (CC_EDITOR) {
+                    if (!value && this._isSystemFontUsed && this._userDefinedFont) {
+                        this.font = this._userDefinedFont;
+                        this.spacingX = this._spacingX;
+                        return;
+                    }
+                }
 
                 this._isSystemFontUsed = !!value;
                 if (value) {
                     this.font = null;
-                    if (this._sgNode) {
-                        this._sgNode.setFontFileOrFamily('Arial');
-                    }
+                    this._updateAssembler();
+                    this._updateRenderData();
+                    this._checkStringEmpty();
+                }
+                else if (!this._userDefinedFont) {
+                    this.disableRender();
                 }
 
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.label.system_font',
+            tooltip: CC_DEV && 'i18n:COMPONENT.label.system_font',
         },
 
         _bmFontOriginalSize: {
@@ -416,16 +417,31 @@ var Label = cc.Class({
             readonly: true,
             visible: true,
             animatable: false
-        }
+        },
 
-        // TODO
-        // enableRichText: {
-        //     default: false,
-        //     notify: function () {
-        //         this._sgNode.enableRichText = this.enableRichText;
-        //     }
-        // }
+        _spacingX: 0,
+        spacingX: {
+            get () {
+                return this._spacingX;
+            },
+            set (value) {
+                this._spacingX = value;
+                this._updateRenderData();
+            }
+        },
 
+        _isBold: {
+            default: false,
+            serializable: false,
+        },
+        _isItalic: {
+            default: false,
+            serializable: false,
+        },
+        _isUnderline: {
+            default: false,
+            serializable: false,
+        },
     },
 
     statics: {
@@ -434,94 +450,172 @@ var Label = cc.Class({
         Overflow: Overflow,
     },
 
-    __preload: function () {
+    onEnable () {
         this._super();
-        if (CC_EDITOR) {
-            this._debouncedUpdateSgNodeString = debounce(this._updateSgNodeString, 200);
-            this._debouncedUpdateFontSize = debounce(this._updateSgNodeFontSize, 200);
+
+        // TODO: Hack for barbarians
+        if (!this.font && !this._isSystemFontUsed) {
+            this.useSystemFont = true;
+        }
+        // Reapply default font family if necessary
+        if (this.useSystemFont && !this.fontFamily) {
+            this.fontFamily = 'Arial';
         }
 
-        var sgSizeInitialized = this._sgNode._isUseSystemFont;
-        if (sgSizeInitialized) {
-            this._updateNodeSize();
-        }
+        // Keep track of Node size
+        this.node.on(cc.Node.EventType.SIZE_CHANGED, this._updateRenderData, this);
+        this.node.on(cc.Node.EventType.ANCHOR_CHANGED, this._updateRenderData, this);
 
-        // node should be resize whenever font changed, needed only on web
-        if (!CC_JSB) {
-            this._sgNode.on('load', this._updateNodeSize, this);
-        }
-
+        this._checkStringEmpty();
+        this._updateAssembler();
+        this._activateMaterial();
     },
 
-    onEnable: function() {
+    onDisable () {
         this._super();
-        cc.director.on(cc.Director.EVENT_BEFORE_VISIT, this._updateNodeSize, this);
+        this.node.off(cc.Node.EventType.SIZE_CHANGED, this._updateRenderData, this);
+        this.node.off(cc.Node.EventType.ANCHOR_CHANGED, this._updateRenderData, this);
     },
 
-    onDisable: function() {
+    onDestroy () {
+        this._assembler._resetAssemblerData && this._assembler._resetAssemblerData(this._assemblerData);
+        this._assemblerData = null;
+        if (this._ttfTexture) {
+            this._ttfTexture.destroy();
+            this._ttfTexture = null;
+        }
         this._super();
-        cc.director.off(cc.Director.EVENT_BEFORE_VISIT, this._updateNodeSize, this);
     },
 
-    _createSgNode: function () {
-        return null;
-    },
-
-    _initSgNode: function () {
-
-        if ( typeof this.font === 'string' ) {
-            cc.warn('Sorry, the cc.Font has been modified from Raw Asset to Asset.' +
-                'Please load the font asset before using.');
-        }
-
-        var isAsset = this.font instanceof cc.Font;
-        var fntRawUrl = isAsset ? this.font.rawUrl : '';
-        var textureUrl = isAsset ? this.font.texture : '';
-        if (this.font instanceof cc.BitmapFont) {
-            this._bmFontOriginalSize = this.font.fontSize;
-        }
-
-        var sgNode = this._sgNode = new _ccsg.Label(this.string, fntRawUrl, textureUrl);
-        sgNode.setVisible(false);
-
-        if (CC_JSB) {
-            sgNode.retain();
-        }
-
-        // TODO
-        // sgNode.enableRichText = this.enableRichText;
-
-        sgNode.setHorizontalAlign( this.horizontalAlign );
-        sgNode.setVerticalAlign( this.verticalAlign );
-        sgNode.setFontSize( this._fontSize );
-        sgNode.setOverflow( this.overflow );
-        sgNode.enableWrapText( this._enableWrapText );
-        sgNode.setLineHeight(this._lineHeight);
-        sgNode.setString(this.string);
-        if (CC_EDITOR) {
-            this._userDefinedFontSize = this.fontSize;
-        }
-        if (CC_EDITOR && this._useOriginalSize) {
-            this.node.setContentSize(sgNode.getContentSize());
-            if (this.font instanceof cc.BitmapFont) {
-                this.lineHeight = sgNode.getBMFontLineHeight();
-            }
-            this._useOriginalSize = false;
-        } else {
-            sgNode.setContentSize(this.node.getContentSize());
-        }
-        sgNode.setColor(this.node.color);
-    },
-
-    // update node size (this will also invoke the size-changed event)
-    _updateNodeSize: function () {
-        var initialized = this._sgNode && this._sgNode.parent;
-        if (initialized) {
-            if (this.overflow === Overflow.NONE || this.overflow === Overflow.RESIZE_HEIGHT) {
-                this.node.setContentSize(this._sgNode.getContentSize());
+    _canRender () {
+        let result = this._super();
+        let font = this.font;
+        if (font instanceof cc.BitmapFont) {
+            let spriteFrame = font.spriteFrame;
+            // cannot be activated if texture not loaded yet
+            if (!spriteFrame || !spriteFrame.textureLoaded()) {
+                result = false;
             }
         }
-    }
+        return result;
+    },
+
+    _checkStringEmpty () {
+        this.markForRender(!!this.string);
+    },
+
+    _updateAssembler () {
+        let assembler = Label._assembler.getAssembler(this);
+
+        if (this._assembler !== assembler) {
+            this._assembler = assembler;
+            this._renderData = null;
+        }
+
+        if (!this._renderData) {
+            this._renderData = this._assembler.createData(this);
+        }
+    },
+
+    _activateMaterial (force) {
+        let material = this._material;
+        if (material && !force) {
+            return;
+        }
+        
+        let font = this.font;
+        if (font instanceof cc.BitmapFont) {
+            let spriteFrame = font.spriteFrame;
+            // cannot be activated if texture not loaded yet
+            if (!spriteFrame || !spriteFrame.textureLoaded()) {
+                this.disableRender();
+
+                if (spriteFrame) {
+                    spriteFrame.once('load', this._activateMaterial, this);
+                    spriteFrame.ensureLoadTexture();
+                }
+                return;
+            }
+            
+            // TODO: old texture in material have been released by loader
+            this._texture = spriteFrame._texture;
+        }
+        else {
+            if (!this._ttfTexture) {
+                this._ttfTexture = new cc.Texture2D();
+                // TTF texture in web will blend with canvas or body background color
+                if (!CC_JSB) {
+                    this._ttfTexture.setPremultiplyAlpha(true);
+                }
+                this._assemblerData = this._assembler._getAssemblerData();
+                this._ttfTexture.initWithElement(this._assemblerData.canvas);
+            }
+            this._texture = this._ttfTexture;
+        }
+
+        // Canvas
+        if (cc.game.renderType === cc.game.RENDER_TYPE_CANVAS) {
+            this._texture.url = this.uuid + '_texture';
+        }
+        // WebGL
+        else {
+            if (!material) {
+                material = new SpriteMaterial();
+            }
+            // Setup blend function for premultiplied ttf label texture
+            if (this._texture === this._ttfTexture) {
+                this._srcBlendFactor = cc.macro.BlendFactor.ONE;
+            }
+            else {
+                this._srcBlendFactor = cc.macro.BlendFactor.SRC_ALPHA;
+            }
+            material.texture = this._texture;
+            // For batch rendering, do not use uniform color.
+            material.useColor = false;
+            this._updateMaterial(material);
+        }
+
+        this.markForUpdateRenderData(true);
+        this.markForRender(true);
+    },
+
+    _updateColor () {
+        let font = this.font;
+        if (font instanceof cc.BitmapFont) {
+            this._super();
+        }
+        else {
+            this._updateRenderData();
+            this.node._renderFlag &= ~RenderFlow.FLAG_COLOR;
+        }
+    },
+
+    _updateRenderData (force) {
+        let renderData = this._renderData;
+        if (renderData) {
+            renderData.vertDirty = true;
+            renderData.uvDirty = true;
+            this.markForUpdateRenderData(true);
+        }
+
+        if (CC_EDITOR || force) {
+            this._updateAssembler();
+            this._activateMaterial(force);
+            this._assembler.updateRenderData(this);
+        }
+    },
+
+    _enableBold (enabled) {
+        this._isBold = !!enabled;
+    },
+
+    _enableItalics (enabled) {
+        this._isItalic = !!enabled;
+    },
+
+    _enableUnderline (enabled) {
+        this._isUnderline = !!enabled;
+    },
  });
 
  cc.Label = module.exports = Label;

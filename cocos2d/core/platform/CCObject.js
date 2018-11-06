@@ -1,4 +1,30 @@
-var JS = require('./js');
+/****************************************************************************
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated engine source code (the "Software"), a limited,
+ worldwide, royalty-free, non-assignable, revocable and non-exclusive license
+ to use Cocos Creator solely to develop games on your target platforms. You shall
+ not use Cocos Creator software for developing other software or tools that's
+ used for developing games. You are not granted to publish, distribute,
+ sublicense, and/or sell copies of Cocos Creator.
+
+ The software or tools in this License Agreement are licensed, not sold.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ ****************************************************************************/
+
+var js = require('./js');
+var CCClass = require('./CCClass');
 
 // definitions for CCObject.Flags
 
@@ -10,16 +36,17 @@ var EditorOnly = 1 << 4;
 var Dirty = 1 << 5;
 var DontDestroy = 1 << 6;
 var Destroying = 1 << 7;
-var Activating = 1 << 8;
+var Deactivating = 1 << 8;
+var LockedInEditor = 1 << 9;
 //var HideInGame = 1 << 9;
-//var HideInEditor = 1 << 10;
+var HideInHierarchy = 1 << 10;
 
 var IsOnEnableCalled = 1 << 11;
 var IsEditorOnEnableCalled = 1 << 12;
-var IsPreloadCalled = 1 << 13;
+var IsPreloadStarted = 1 << 13;
 var IsOnLoadCalled = 1 << 14;
 var IsOnLoadStarted = 1 << 15;
-var IsOnStartCalled = 1 << 16;
+var IsStartCalled = 1 << 16;
 
 var IsRotationLocked = 1 << 17;
 var IsScaleLocked = 1 << 18;
@@ -27,20 +54,18 @@ var IsAnchorLocked = 1 << 19;
 var IsSizeLocked = 1 << 20;
 var IsPositionLocked = 1 << 21;
 
-//var Hide = HideInGame | HideInEditor;
+//var Hide = HideInGame | HideInHierarchy;
 // should not clone or serialize these flags
-var PersistentMask = ~(ToDestroy | Dirty | Destroying | DontDestroy | Activating |
-                       IsPreloadCalled | IsOnLoadStarted | IsOnLoadCalled | IsOnStartCalled |
+var PersistentMask = ~(ToDestroy | Dirty | Destroying | DontDestroy | Deactivating |
+                       IsPreloadStarted | IsOnLoadStarted | IsOnLoadCalled | IsStartCalled |
                        IsOnEnableCalled | IsEditorOnEnableCalled |
                        IsRotationLocked | IsScaleLocked | IsAnchorLocked | IsSizeLocked | IsPositionLocked
                        /*RegisteredInEditor*/);
-// TODO
-//var PersistentMask = Destroyed | RealDestroyed | DontSave | EditorOnly;
 
 /**
  * The base class of most of all the objects in Fireball.
  * @class Object
- * @constructor
+ *
  * @main
  * @private
  */
@@ -59,16 +84,17 @@ function CCObject () {
      */
     this._objFlags = 0;
 }
+CCClass.fastDefine('cc.Object', CCObject, { _name: '', _objFlags: 0 });
 
 /**
  * Bit mask that controls object states.
- * @class Flags
+ * @enum Flags
  * @static
  * @private
  */
-CCObject.Flags = {
+js.value(CCObject, 'Flags', {
 
-    Destroyed: Destroyed,
+    Destroyed,
     //ToDestroy: ToDestroy,
 
     /**
@@ -76,31 +102,47 @@ CCObject.Flags = {
      * !#zh 该对象将不会被保存。
      * @property {Number} DontSave
      */
-    DontSave: DontSave,
+    DontSave,
 
     /**
      * !#en The object will not be saved when building a player.
      * !#zh 构建项目时，该对象将不会被保存。
      * @property {Number} EditorOnly
      */
-    EditorOnly: EditorOnly,
+    EditorOnly,
 
-    Dirty: Dirty,
+    Dirty,
 
     /**
      * !#en Dont destroy automatically when loading a new scene.
-     * !#zh 加载一个新场景时，不自动删除该对象
+     * !#zh 加载一个新场景时，不自动删除该对象。
      * @property DontDestroy
      * @private
      */
-    DontDestroy: DontDestroy,
+    DontDestroy,
 
-    PersistentMask: PersistentMask,
+    PersistentMask,
 
     // FLAGS FOR ENGINE
 
-    Destroying: Destroying,
-    Activating: Activating,
+    Destroying,
+
+    /**
+     * !#en The node is deactivating.
+     * !#zh 节点正在反激活的过程中。
+     * @property Deactivating
+     * @private
+     */
+    Deactivating,
+
+    /**
+     * !#en The lock node, when the node is locked, cannot be clicked in the scene.
+     * !#zh 锁定节点，锁定后场景内不能点击。
+     * 
+     * @property LockedInEditor
+     * @private
+     */
+    LockedInEditor,
 
     ///**
     // * !#en
@@ -115,12 +157,12 @@ CCObject.Flags = {
 
     // FLAGS FOR EDITOR
 
-    ///**
-    // * !#en This flag is readonly, it can only be used as an argument of scene.addEntity() or Entity.createWithFlags().
-    // * !#zh 该标记只读，它只能被用作 scene.addEntity()的一个参数。
-    // * @property {Number} HideInEditor
-    // */
-    //HideInEditor: HideInEditor,
+    /**
+     * !#en Hide the object in editor.
+     * !#zh 在编辑器中隐藏该对象。
+     * @property {Number} HideInHierarchy
+     */
+    HideInHierarchy: HideInHierarchy,
 
     ///**
     // * !#en
@@ -133,28 +175,21 @@ CCObject.Flags = {
     // */
     //Hide: Hide,
 
-    //// UUID Registered in editor
-    //RegisteredInEditor: RegisteredInEditor,
-
     // FLAGS FOR COMPONENT
 
-    IsPreloadCalled: IsPreloadCalled,
-    IsOnLoadCalled: IsOnLoadCalled,
-    IsOnLoadStarted: IsOnLoadStarted,
-    IsOnEnableCalled: IsOnEnableCalled,
-    IsOnStartCalled: IsOnStartCalled,
-    IsEditorOnEnableCalled: IsEditorOnEnableCalled,
+    IsPreloadStarted,
+    IsOnLoadStarted,
+    IsOnLoadCalled,
+    IsOnEnableCalled,
+    IsStartCalled,
+    IsEditorOnEnableCalled,
 
-    IsPositionLocked: IsPositionLocked,
-    IsRotationLocked: IsRotationLocked,
-    IsScaleLocked: IsScaleLocked,
-    IsAnchorLocked: IsAnchorLocked,
-    IsSizeLocked: IsSizeLocked,
-};
-
-require('./CCClass').fastDefine('cc.Object', CCObject, { _name: '', _objFlags: 0 });
-
-// internal static
+    IsPositionLocked,
+    IsRotationLocked,
+    IsScaleLocked,
+    IsAnchorLocked,
+    IsSizeLocked,
+});
 
 var objectsToDestroy = [];
 
@@ -180,18 +215,13 @@ function deferredDestroy () {
     }
 }
 
-Object.defineProperty(CCObject, '_deferredDestroy', {
-    value: deferredDestroy,
-    // enumerable is false by default
-});
+js.value(CCObject, '_deferredDestroy', deferredDestroy);
 
 if (CC_EDITOR) {
-    Object.defineProperty(CCObject, '_clearDeferredDestroyTimer', {
-        value: function () {
-            if (deferredDestroyTimer !== null) {
-                clearImmediate(deferredDestroyTimer);
-                deferredDestroyTimer = null;
-            }
+    js.value(CCObject, '_clearDeferredDestroyTimer', function () {
+        if (deferredDestroyTimer !== null) {
+            clearImmediate(deferredDestroyTimer);
+            deferredDestroyTimer = null;
         }
     });
 }
@@ -212,30 +242,45 @@ var prototype = CCObject.prototype;
  * @example
  * obj.name = "New Obj";
  */
-JS.getset(prototype, 'name',
+js.getset(prototype, 'name',
     function () {
         return this._name;
     },
     function (value) {
         this._name = value;
-    }
+    },
+    true
 );
 
 /**
- * !#en Indicates whether the object is not yet destroyed.
- * !#zh 表示该对象是否可用（被销毁后将不可用）。
+ * !#en
+ * Indicates whether the object is not yet destroyed. (It will not be available after being destroyed)<br>
+ * When an object's `destroy` is called, it is actually destroyed after the end of this frame.
+ * So `isValid` will return false from the next frame, while `isValid` in the current frame will still be true.
+ * If you want to determine whether the current frame has called `destroy`, use `cc.isValid(obj, true)`,
+ * but this is often caused by a particular logical requirements, which is not normally required.
+ *
+ * !#zh
+ * 表示该对象是否可用（被 destroy 后将不可用）。<br>
+ * 当一个对象的 `destroy` 调用以后，会在这一帧结束后才真正销毁。因此从下一帧开始 `isValid` 就会返回 false，而当前帧内 `isValid` 仍然会是 true。如果希望判断当前帧是否调用过 `destroy`，请使用 `cc.isValid(obj, true)`，不过这往往是特殊的业务需求引起的，通常情况下不需要这样。
+ *
  * @property {Boolean} isValid
  * @default true
  * @readOnly
  * @example
- * cc.log(obj.isValid);
+ * var node = new cc.Node();
+ * cc.log(node.isValid);    // true
+ * node.destroy();
+ * cc.log(node.isValid);    // true, still valid in this frame
+ * // after a frame...
+ * cc.log(node.isValid);    // false, destroyed in the end of last frame
  */
-JS.get(prototype, 'isValid', function () {
+js.get(prototype, 'isValid', function () {
     return !(this._objFlags & Destroyed);
-});
+}, true);
 
 if (CC_EDITOR || CC_TEST) {
-    JS.get(prototype, 'isRealValid', function () {
+    js.get(prototype, 'isRealValid', function () {
         return !(this._objFlags & RealDestroyed);
     });
 }
@@ -245,14 +290,13 @@ var deferredDestroyTimer = null;
 /**
  * !#en
  * Destroy this Object, and release all its own references to other objects.<br/>
- * <br/>
- * After destroy, this CCObject is not usable any more.<br/>
- * You can use cc.isValid(obj) (or obj.isValid if obj is non-nil) to check whether the object is destroyed before
- * accessing it.
+ * Actual object destruction will delayed until before rendering.
+ * From the next frame, this object is not usable any more.
+ * You can use cc.isValid(obj) to check whether the object is destroyed before accessing it.
  * !#zh
  * 销毁该对象，并释放所有它对其它对象的引用。<br/>
- * 销毁后，CCObject 不再可用。<br/>
- * 您可以在访问对象之前使用 cc.isValid(obj)（或 obj.isValid 如果 obj 不为 null）来检查对象是否已被销毁。
+ * 实际销毁操作会延迟到当前帧渲染前执行。从下一帧开始，该对象将不再可用。
+ * 您可以在访问对象之前使用 cc.isValid(obj) 来检查对象是否已被销毁。
  * @method destroy
  * @return {Boolean} whether it is the first time the destroy being called
  * @example
@@ -260,7 +304,7 @@ var deferredDestroyTimer = null;
  */
 prototype.destroy = function () {
     if (this._objFlags & Destroyed) {
-        cc.warn('object already destroyed');
+        cc.warnID(5000);
         return false;
     }
     if (this._objFlags & ToDestroy) {
@@ -289,11 +333,11 @@ if (CC_EDITOR || CC_TEST) {
      */
     prototype.realDestroyInEditor = function () {
         if ( !(this._objFlags & Destroyed) ) {
-            cc.warn('object not yet destroyed');
+            cc.warnID(5001);
             return;
         }
         if (this._objFlags & RealDestroyed) {
-            cc.warn('object already destroyed');
+            cc.warnID(5000);
             return;
         }
         this._destruct();
@@ -301,29 +345,113 @@ if (CC_EDITOR || CC_TEST) {
     };
 }
 
-/**
- * Clear all references in the instance.
- *
- * NOTE: this method will not clear the getter or setter functions which defined in the INSTANCE of CCObject.
- *       You can override the _destruct method if you need.
- * @method _destruct
- * @private
- */
-prototype._destruct = function () {
-    // 所有可枚举到的属性，都会被清空
-    for (var key in this) {
-        if (this.hasOwnProperty(key)) {
-            switch (typeof this[key]) {
+function compileDestruct (obj, ctor) {
+    var shouldSkipId = obj instanceof cc._BaseNode || obj instanceof cc.Component;
+    var idToSkip = shouldSkipId ? '_id' : null;
+
+    var key, propsToReset = {};
+    for (key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            if (key === idToSkip) {
+                continue;
+            }
+            switch (typeof obj[key]) {
                 case 'string':
-                    this[key] = '';
+                    propsToReset[key] = '';
                     break;
                 case 'object':
                 case 'function':
-                    this[key] = null;
+                    propsToReset[key] = null;
                     break;
             }
         }
     }
+    // Overwrite propsToReset according to Class
+    if (cc.Class._isCCClass(ctor)) {
+        var attrs = cc.Class.Attr.getClassAttrs(ctor);
+        var propList = ctor.__props__;
+        for (var i = 0; i < propList.length; i++) {
+            key = propList[i];
+            var attrKey = key + cc.Class.Attr.DELIMETER + 'default';
+            if (attrKey in attrs) {
+                if (shouldSkipId && key === '_id') {
+                    continue;
+                }
+                switch (typeof attrs[attrKey]) {
+                    case 'string':
+                        propsToReset[key] = '';
+                        break;
+                    case 'object':
+                    case 'function':
+                        propsToReset[key] = null;
+                        break;
+                    case 'undefined':
+                        propsToReset[key] = undefined;
+                        break;
+                }
+            }
+        }
+    }
+
+    if (CC_SUPPORT_JIT) {
+        // compile code
+        var func = '';
+        for (key in propsToReset) {
+            var statement;
+            if (CCClass.IDENTIFIER_RE.test(key)) {
+                statement = 'o.' + key + '=';
+            }
+            else {
+                statement = 'o[' + CCClass.escapeForJS(key) + ']=';
+            }
+            var val = propsToReset[key];
+            if (val === '') {
+                val = '""';
+            }
+            func += (statement + val + ';\n');
+        }
+        return Function('o', func);
+    }
+    else {
+        return function (o) {
+            for (var key in propsToReset) {
+                o[key] = propsToReset[key];
+            }
+        };
+    }
+}
+
+/**
+ * Clear all references in the instance.
+ *
+ * NOTE: this method will not clear the getter or setter functions which defined in the instance of CCObject.
+ *       You can override the _destruct method if you need, for example:
+ *       _destruct: function () {
+ *           for (var key in this) {
+ *               if (this.hasOwnProperty(key)) {
+ *                   switch (typeof this[key]) {
+ *                       case 'string':
+ *                           this[key] = '';
+ *                           break;
+ *                       case 'object':
+ *                       case 'function':
+ *                           this[key] = null;
+ *                           break;
+ *               }
+ *           }
+ *       }
+ *
+ * @method _destruct
+ * @private
+ */
+prototype._destruct = function () {
+    var ctor = this.constructor;
+    var destruct = ctor.__destruct__;
+    if (!destruct) {
+        destruct = compileDestruct(this, ctor);
+        js.value(ctor, '__destruct__', destruct, true);
+    }
+    destruct(this);
 };
 
 /**
@@ -335,7 +463,7 @@ prototype._onPreDestroy = null;
 
 prototype._destroyImmediate = function () {
     if (this._objFlags & Destroyed) {
-        cc.error('object already destroyed');
+        cc.errorID(5000);
         return;
     }
     // engine internal callback
@@ -343,7 +471,7 @@ prototype._destroyImmediate = function () {
         this._onPreDestroy();
     }
 
-    if (!CC_EDITOR || cc.engine._isPlaying) {
+    if ((CC_TEST ? (/* make CC_EDITOR mockable*/ Function('return !CC_EDITOR'))() : !CC_EDITOR) || cc.engine._isPlaying) {
         this._destruct();
     }
 
@@ -375,17 +503,32 @@ prototype._deserialize = null;
  */
 
 /**
- * !#en Checks whether the object is non-nil and not yet destroyed.
- * !#zh 检查该对象是否不为 null 并且尚未销毁。
+ * !#en
+ * Checks whether the object is non-nil and not yet destroyed.<br>
+ * When an object's `destroy` is called, it is actually destroyed after the end of this frame.
+ * So `isValid` will return false from the next frame, while `isValid` in the current frame will still be true.
+ * If you want to determine whether the current frame has called `destroy`, use `cc.isValid(obj, true)`,
+ * but this is often caused by a particular logical requirements, which is not normally required.
+ *
+ * !#zh
+ * 检查该对象是否不为 null 并且尚未销毁。<br>
+ * 当一个对象的 `destroy` 调用以后，会在这一帧结束后才真正销毁。因此从下一帧开始 `isValid` 就会返回 false，而当前帧内 `isValid` 仍然会是 true。如果希望判断当前帧是否调用过 `destroy`，请使用 `cc.isValid(obj, true)`，不过这往往是特殊的业务需求引起的，通常情况下不需要这样。
+ *
  * @method isValid
  * @param {any} value
+ * @param {Boolean} [strictMode=false] - If true, Object called destroy() in this frame will also treated as invalid.
  * @return {Boolean} whether is valid
  * @example
- * cc.log(cc.isValid(target));
+ * var node = new cc.Node();
+ * cc.log(cc.isValid(node));    // true
+ * node.destroy();
+ * cc.log(cc.isValid(node));    // true, still valid in this frame
+ * // after a frame...
+ * cc.log(cc.isValid(node));    // false, destroyed in the end of last frame
  */
-cc.isValid = function (value) {
+cc.isValid = function (value, strictMode) {
     if (typeof value === 'object') {
-        return !!value && !(value._objFlags & Destroyed);
+        return !!value && !(value._objFlags & (strictMode ? (Destroyed | ToDestroy) : Destroyed));
     }
     else {
         return typeof value !== 'undefined';
@@ -393,21 +536,13 @@ cc.isValid = function (value) {
 };
 
 if (CC_EDITOR || CC_TEST) {
-    Object.defineProperty(CCObject, '_willDestroy', {
-        value: function (obj) {
-            return !(obj._objFlags & Destroyed) && (obj._objFlags & ToDestroy) > 0;
-        }
+    js.value(CCObject, '_willDestroy', function (obj) {
+        return !(obj._objFlags & Destroyed) && (obj._objFlags & ToDestroy) > 0;
     });
-    Object.defineProperty(CCObject, '_cancelDestroy', {
-        value: function (obj) {
-            obj._objFlags &= ~ToDestroy;
-            var index = objectsToDestroy.indexOf(obj);
-            if (index !== -1) {
-                objectsToDestroy.splice(index, 1);
-            }
-        }
+    js.value(CCObject, '_cancelDestroy', function (obj) {
+        obj._objFlags &= ~ToDestroy;
+        js.array.fastRemove(objectsToDestroy, obj);
     });
 }
 
-cc.Object = CCObject;
-module.exports = CCObject;
+cc.Object = module.exports = CCObject;

@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,20 +24,19 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+const misc = require('../utils/misc');
+const Component = require('./CCComponent');
+const AudioClip = require('../assets/CCAudioClip');
+
 /**
  * !#en Audio Source.
  * !#zh 音频源组件，能对音频剪辑。
  * @class AudioSource
  * @extends Component
  */
-
-// todo jsb 中无法针对单独的音效对象进行设置（如音量大小等）
-
-var audioEngine = cc.audioEngine;
-
 var AudioSource = cc.Class({
     name: 'cc.AudioSource',
-    extends: require('./CCComponent'),
+    extends: Component,
 
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.others/AudioSource',
@@ -44,17 +44,23 @@ var AudioSource = cc.Class({
     },
 
     ctor: function () {
-        this.audio = null;
+        // We can't require Audio here because jsb Audio is implemented outside the engine,
+        // it can only take effect rely on overwriting cc.Audio
+        this.audio = new cc.Audio();
     },
 
     properties: {
         _clip: {
-            default: '',
-            url: cc.AudioClip
+            default: null,
+            type: AudioClip
         },
         _volume: 1,
         _mute: false,
         _loop: false,
+        _pausedFlag: {
+            default: false,
+            serializable: false
+        },
 
         /**
          * !#en
@@ -70,14 +76,15 @@ var AudioSource = cc.Class({
          */
         isPlaying: {
             get: function () {
-                return (!cc.sys.isNative && this.audio && this.audio.getPlaying());
+                var state = this.audio.getState();
+                return state === cc.Audio.State.PLAYING;
             },
             visible: false
         },
 
         /**
-         * !#en The clip of the audio source.
-         * !#zh 默认要播放的音频剪辑。
+         * !#en The clip of the audio source to play.
+         * !#zh 要播放的音频剪辑。
          * @property clip
          * @type {AudioClip}
          * @default 1
@@ -87,10 +94,29 @@ var AudioSource = cc.Class({
                 return this._clip;
             },
             set: function (value) {
+                if (typeof value === 'string') {
+                    // backward compatibility since 1.10
+                    cc.warnID(8401, 'cc.AudioSource', 'cc.AudioClip', 'AudioClip', 'cc.AudioClip', 'audio');
+                    let self = this;
+                    AudioClip._loadByUrl(value, function (err, clip) {
+                        if (clip) {
+                            self.clip = clip;
+                        }
+                    });
+                    return;
+                }
+
+                if (value === this._clip) {
+                    return;
+                }
                 this._clip = value;
+                this.audio.stop();
+                if (this.preload) {
+                    this.audio.src = this._clip;
+                }
             },
-            url: cc.AudioClip,
-            tooltip: 'i18n:COMPONENT.audio.clip',
+            type: AudioClip,
+            tooltip: CC_DEV && 'i18n:COMPONENT.audio.clip',
             animatable: false
         },
 
@@ -106,17 +132,14 @@ var AudioSource = cc.Class({
                 return this._volume;
             },
             set: function (value) {
+                value = misc.clamp01(value);
                 this._volume = value;
-                if (this.audio) {
-                    if (cc.sys.isNative) {
-                        cc.audioEngine.setEffectsVolume(value);
-                    }
-                    else {
-                        this.audio.setVolume(value);
-                    }
+                if (!this._mute) {
+                    this.audio.setVolume(value);
                 }
+                return value;
             },
-            tooltip: 'i18n:COMPONENT.audio.volume'
+            tooltip: CC_DEV && 'i18n:COMPONENT.audio.volume'
         },
 
         /**
@@ -132,24 +155,11 @@ var AudioSource = cc.Class({
             },
             set: function (value) {
                 this._mute = value;
-                if (this.audio) {
-                    if (this._mute) {
-                        if (CC_JSB) {
-                            cc.audioEngine.setEffectsVolume(0);
-                        } else {
-                            this.audio.setVolume(0);
-                        }
-                    } else {
-                        if (CC_JSB) {
-                            cc.audioEngine.setEffectsVolume(this._volume);
-                        } else {
-                            this.audio.setVolume(this._volume);
-                        }
-                    }
-                }
+                this.audio.setVolume(value ? 0 : this._volume);
+                return value;
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.audio.mute',
+            tooltip: CC_DEV && 'i18n:COMPONENT.audio.mute',
         },
 
         /**
@@ -165,38 +175,78 @@ var AudioSource = cc.Class({
             },
             set: function (value) {
                 this._loop = value;
-                if (this.audio) this.audio.loop = this._loop;
+                this.audio.setLoop(value);
+                return value;
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.audio.loop'
+            tooltip: CC_DEV && 'i18n:COMPONENT.audio.loop'
         },
 
         /**
-         * !#en If set to true, the audio source will automatically start playing on onLoad.
-         * !#zh 如果设置为true，音频源将在 onLoad 时自动播放。
+         * !#en If set to true, the audio source will automatically start playing on onEnable.
+         * !#zh 如果设置为 true，音频源将在 onEnable 时自动播放。
          * @property playOnLoad
          * @type {Boolean}
          * @default true
          */
         playOnLoad: {
             default: false,
-            tooltip: 'i18n:COMPONENT.audio.play_on_load',
+            tooltip: CC_DEV && 'i18n:COMPONENT.audio.play_on_load',
+            animatable: false
+        },
+
+        preload: {
+            default: false,
             animatable: false
         }
     },
 
+    _ensureDataLoaded () {
+        if (this.audio.src !== this._clip) {
+            this.audio.src = this._clip;
+        }
+    },
+
+    _pausedCallback: function () {
+        var audio = this.audio;
+        if (audio.paused) return;
+        this.audio.pause();
+        this._pausedFlag = true;
+    },
+
+    _restoreCallback: function () {
+        if (this._pausedFlag) {
+            this.audio.resume();
+        }
+        this._pausedFlag = false;
+    },
+
+    onLoad: function () {
+        this.audio.setVolume(this._mute ? 0 : this._volume);
+        this.audio.setLoop(this._loop);
+    },
+
     onEnable: function () {
-        if ( this.playOnLoad ) {
+        if (this.preload) {
+            this.audio.src = this._clip;
+        }
+        if (this.playOnLoad) {
             this.play();
         }
+        cc.game.on(cc.game.EVENT_HIDE, this._pausedCallback, this);
+        cc.game.on(cc.game.EVENT_SHOW, this._restoreCallback, this);
     },
 
     onDisable: function () {
         this.stop();
+        cc.game.off(cc.game.EVENT_HIDE, this._pausedCallback, this);
+        cc.game.off(cc.game.EVENT_SHOW, this._restoreCallback, this);
     },
 
     onDestroy: function () {
         this.stop();
+        this.audio.destroy();
+        cc.audioEngine.uncache(this._clip);
     },
 
     /**
@@ -205,14 +255,15 @@ var AudioSource = cc.Class({
      * @method play
      */
     play: function () {
-        if ( this._clip ) {
-            var volume = this._mute ? 0 : this._volume;
-            this.audio = audioEngine.playEffect(this._clip, this._loop, volume);
+        if ( !this._clip ) return;
 
-            if (CC_JSB) {
-                cc.audioEngine.setEffectsVolume(volume);
-            }
+        var audio = this.audio;
+        if (this._clip.loaded) {
+            audio.stop();
         }
+        this._ensureDataLoaded();
+        audio.setCurrentTime(0);
+        audio.play();
     },
 
     /**
@@ -221,7 +272,7 @@ var AudioSource = cc.Class({
      * @method stop
      */
     stop: function () {
-        if ( this.audio ) cc.audioEngine.stopEffect(this.audio);
+        this.audio.stop();
     },
 
     /**
@@ -230,7 +281,7 @@ var AudioSource = cc.Class({
      * @method pause
      */
     pause: function () {
-        if ( this.audio ) cc.audioEngine.pauseEffect(this.audio);
+        this.audio.pause();
     },
 
     /**
@@ -239,7 +290,8 @@ var AudioSource = cc.Class({
      * @method resume
      */
     resume: function () {
-        if ( this.audio ) cc.audioEngine.resumeEffect(this.audio);
+        this._ensureDataLoaded();
+        this.audio.resume();
     },
 
     /**
@@ -248,11 +300,40 @@ var AudioSource = cc.Class({
      * @method rewind
      */
     rewind: function(){
-        if ( this.audio ) {
-            this.stop();
-            this.play();
-        }
+        this.audio.setCurrentTime(0);
     },
+
+    /**
+     * !#en Get current time
+     * !#zh 获取当前的播放时间
+     * @method getCurrentTime
+     * @return {Number}
+     */
+    getCurrentTime: function () {
+        return this.audio.getCurrentTime();
+    },
+
+    /**
+     * !#en Set current time
+     * !#zh 设置当前的播放时间
+     * @method setCurrentTime
+     * @param {Number} time
+     * @return {Number}
+     */
+    setCurrentTime: function (time) {
+        this.audio.setCurrentTime(time);
+        return time;
+    },
+
+    /**
+     * !#en Get audio duration
+     * !#zh 获取当前音频的长度
+     * @method getDuration
+     * @return {Number}
+     */
+    getDuration: function () {
+        return this.audio.getDuration();
+    }
 
 });
 

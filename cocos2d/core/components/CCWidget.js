@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,6 +25,35 @@
  ****************************************************************************/
 
 var WidgetManager = require('../base-ui/CCWidgetManager');
+
+/**
+ * !#en Enum for Widget's alignment mode, indicating when the widget should refresh.
+ * !#zh Widget 的对齐模式，表示 Widget 应该何时刷新。
+ * @enum Widget.AlignMode
+ */
+/**
+ * !#en
+ * Only align once when the Widget is enabled for the first time.
+ * This will allow the script or animation to continue controlling the current node.
+ * It will only be aligned once before the end of frame when onEnable is called,
+ * then immediately disables the Widget.
+ * !#zh
+ * 仅在 Widget 第一次激活时对齐一次，便于脚本或动画继续控制当前节点。
+ * 开启后会在 onEnable 时所在的那一帧结束前对齐一次，然后立刻禁用该 Widget。
+ * @property {Number} ONCE
+ */
+/**
+ * !#en Align first from the beginning as ONCE, and then realign it every time the window is resized.
+ * !#zh 一开始会像 ONCE 一样对齐一次，之后每当窗口大小改变时还会重新对齐。
+ * @property {Number} ON_WINDOW_RESIZE
+ */
+/**
+ * !#en Keep aligning all the way.
+ * !#zh 始终保持对齐。
+ * @property {Number} ALWAYS
+ */
+var AlignMode = WidgetManager.AlignMode;
+
 var AlignFlags = WidgetManager._AlignFlags;
 var TOP     = AlignFlags.TOP;
 var MID     = AlignFlags.MID;
@@ -38,8 +68,11 @@ var LEFT_RIGHT = LEFT | RIGHT;
  * !#en
  * Stores and manipulate the anchoring based on its parent.
  * Widget are used for GUI but can also be used for other things.
+ * Widget will adjust current node's position and size automatically, but the results after adjustment can not be obtained until the next frame unless you call {{#crossLink "Widget/updateAlignment:method"}}{{/crossLink}} manually.
  * !#zh
  * Widget 组件，用于设置和适配其相对于父节点的边距，Widget 通常被用于 UI 界面，也可以用于其他地方。
+ * Widget 会自动调整当前节点的坐标和宽高，不过目前调整后的结果要到下一帧才能在脚本里获取到，除非你先手动调用 {{#crossLink "Widget/updateAlignment:method"}}{{/crossLink}}。
+ *
  * @class Widget
  * @extends Component
  */
@@ -49,12 +82,34 @@ var Widget = cc.Class({
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.ui/Widget',
         help: 'i18n:COMPONENT.help_url.widget',
-        inspector: 'app://editor/page/inspector/widget/index.html',
+        inspector: 'packages://inspector/inspectors/comps/ccwidget.js',
         executeInEditMode: true,
         disallowMultiple: true,
     },
 
     properties: {
+
+        /**
+         * !#en Specifies an alignment target that can only be one of the parent nodes of the current node.
+         * The default value is null, and when null, indicates the current parent.
+         * !#zh 指定一个对齐目标，只能是当前节点的其中一个父节点，默认为空，为空时表示当前父节点。
+         * @property {Node} target
+         * @default null
+         */
+        target: {
+            get: function () {
+                return this._target;
+            },
+            set: function (value) {
+                this._target = value;
+                if (CC_EDITOR && !cc.engine._isPlaying && this.node._parent) {
+                    // adjust the offsets to keep the size and position unchanged after target chagned
+                    WidgetManager.updateOffsetsToStayPut(this);
+                }
+            },
+            type: cc.Node,
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.target',
+        },
 
         // ENABLE ALIGN ?
 
@@ -73,7 +128,7 @@ var Widget = cc.Class({
                 this._setAlign(TOP, value);
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_top',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_top',
         },
 
         /**
@@ -100,7 +155,7 @@ var Widget = cc.Class({
                 }
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_v_center',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_v_center',
         },
 
         /**
@@ -118,7 +173,7 @@ var Widget = cc.Class({
                 this._setAlign(BOT, value);
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_bottom',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_bottom',
         },
 
         /**
@@ -136,7 +191,7 @@ var Widget = cc.Class({
                 this._setAlign(LEFT, value);
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_left',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_left',
         },
 
         /**
@@ -163,7 +218,7 @@ var Widget = cc.Class({
                 }
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_h_center',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_h_center',
         },
 
         /**
@@ -181,7 +236,7 @@ var Widget = cc.Class({
                 this._setAlign(RIGHT, value);
             },
             animatable: false,
-            tooltip: 'i18n:COMPONENT.widget.align_right',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_right',
         },
 
         /**
@@ -238,7 +293,7 @@ var Widget = cc.Class({
             set: function (value) {
                 this._top = value;
             },
-            tooltip: 'i18n:COMPONENT.widget.top',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.top',
         },
 
         /**
@@ -258,7 +313,7 @@ var Widget = cc.Class({
             set: function (value) {
                 this._bottom = value;
             },
-            tooltip: 'i18n:COMPONENT.widget.bottom',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.bottom',
         },
 
         /**
@@ -278,7 +333,7 @@ var Widget = cc.Class({
             set: function (value) {
                 this._left = value;
             },
-            tooltip: 'i18n:COMPONENT.widget.left',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.left',
         },
 
         /**
@@ -298,10 +353,82 @@ var Widget = cc.Class({
             set: function (value) {
                 this._right = value;
             },
-            tooltip: 'i18n:COMPONENT.widget.right',
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.right',
+        },
+
+        /**
+         * !#en
+         * Horizontal aligns the midpoint offset value,
+         * the value can be negative, Only available in 'isAlignHorizontalCenter' open.
+         * !#zh 水平居中的偏移值，可填写负值，只有在 isAlignHorizontalCenter 开启时才有作用。
+         * @property horizontalCenter
+         * @type {Number}
+         * @default 0
+         */
+        horizontalCenter: {
+            get: function () {
+                return this._horizontalCenter;
+            },
+            set: function (value) {
+                this._horizontalCenter = value;
+            },
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.horizontal_center',
+        },
+
+        /**
+         * !#en
+         * Vertical aligns the midpoint offset value,
+         * the value can be negative, Only available in 'isAlignVerticalCenter' open.
+         * !#zh 垂直居中的偏移值，可填写负值，只有在 isAlignVerticalCenter 开启时才有作用。
+         * @property verticalCenter
+         * @type {Number}
+         * @default 0
+         */
+        verticalCenter: {
+            get: function () {
+                return this._verticalCenter;
+            },
+            set: function (value) {
+                this._verticalCenter = value;
+            },
+            tooltip: CC_DEV && 'i18n:COMPONENT.widget.vertical_center',
         },
 
         // PARCENTAGE OR ABSOLUTE
+
+        /**
+         * !#en If true, horizontalCenter is pixel margin, otherwise is percentage (0 - 1) margin.
+         * !#zh 如果为 true，"horizontalCenter" 将会以像素作为偏移值，反之为百分比（0 到 1）。
+         * @property isAbsoluteHorizontalCenter
+         * @type {Boolean}
+         * @default true
+         */
+        isAbsoluteHorizontalCenter: {
+            get: function () {
+                return this._isAbsHorizontalCenter;
+            },
+            set: function (value) {
+                this._isAbsHorizontalCenter = value;
+            },
+            animatable: false
+        },
+
+        /**
+         * !#en If true, verticalCenter is pixel margin, otherwise is percentage (0 - 1) margin.
+         * !#zh 如果为 true，"verticalCenter" 将会以像素作为偏移值，反之为百分比（0 到 1）。
+         * @property isAbsoluteVerticalCenter
+         * @type {Boolean}
+         * @default true
+         */
+        isAbsoluteVerticalCenter: {
+            get: function () {
+                return this._isAbsVerticalCenter;
+            },
+            set: function (value) {
+                this._isAbsVerticalCenter = value;
+            },
+            animatable: false
+        },
 
         /**
          * !#en
@@ -380,22 +507,26 @@ var Widget = cc.Class({
         },
 
         /**
-         * !#en TODO
-         * !#zh
-         * 开启后仅会在 onEnable 的当帧结束时对齐一次，然后立刻禁用当前组件。
-         * 这样便于脚本或动画继续控制当前节点。
-         * 注意：onEnable 时所在的那一帧仍然会进行对齐。
-         * @property isAlignOnce
-         * @type {Boolean}
-         * @default false
+         * !#en Specifies the alignment mode of the Widget, which determines when the widget should refresh.
+         * !#zh 指定 Widget 的对齐模式，用于决定 Widget 应该何时刷新。
+         * @property {Widget.AlignMode} alignMode
+         * @example
+         * widget.alignMode = cc.Widget.AlignMode.ON_WINDOW_RESIZE;
          */
-        isAlignOnce: {
-            default: true,
-            tooltip: 'i18n:COMPONENT.widget.align_once',
-            displayName: "AlignOnce"
+        alignMode: {
+           default: AlignMode.ON_WINDOW_RESIZE,
+           type: AlignMode,
+           tooltip: CC_DEV && 'i18n:COMPONENT.widget.align_mode',
         },
 
         //
+
+        _wasAlignOnce: {
+            default: undefined,
+            formerlySerializedAs: 'isAlignOnce',
+        },
+
+        _target: null,
 
         /**
          * !#zh: 对齐开关，由 AlignFlags 组成
@@ -411,14 +542,30 @@ var Widget = cc.Class({
         _right: 0,
         _top: 0,
         _bottom: 0,
+        _verticalCenter: 0,
+        _horizontalCenter: 0,
         _isAbsLeft: true,
         _isAbsRight: true,
         _isAbsTop: true,
         _isAbsBottom: true,
+        _isAbsHorizontalCenter: true,
+        _isAbsVerticalCenter: true,
 
         // original size before align
         _originalWidth: 0,
         _originalHeight: 0
+    },
+
+    statics: {
+        AlignMode: AlignMode,
+    },
+
+    onLoad: function () {
+        if (this._wasAlignOnce !== undefined) {
+            // migrate for old version
+            this.alignMode = this._wasAlignOnce ? AlignMode.ONCE : AlignMode.ALWAYS;
+            this._wasAlignOnce = undefined;
+        }
     },
 
     onEnable: function () {
@@ -429,9 +576,21 @@ var Widget = cc.Class({
         WidgetManager.remove(this);
     },
 
+    _validateTargetInDEV: CC_DEV && function () {
+        var target = this._target;
+        if (target) {
+            var isParent = this.node !== target && this.node.isChildOf(target);
+            if (!isParent) {
+                cc.errorID(6500);
+                this._target = null;
+            }
+        }
+
+    },
+
     _setAlign: function (flag, isAlign) {
         var current = (this._alignFlags & flag) > 0;
-        if (isAlign == current) {
+        if (isAlign === current) {
             return;
         }
         var isHorizontal = (flag & LEFT_RIGHT) > 0;
@@ -482,6 +641,55 @@ var Widget = cc.Class({
 
             this._alignFlags &= ~flag;
         }
+    },
+
+    /**
+     * !#en
+     * Immediately perform the widget alignment. You need to manually call this method only if
+     * you need to get the latest results after the alignment before the end of current frame.
+     * !#zh
+     * 立刻执行 widget 对齐操作。这个接口一般不需要手工调用。
+     * 只有当你需要在当前帧结束前获得 widget 对齐后的最新结果时才需要手动调用这个方法。
+     *
+     * @method updateAlignment
+     *
+     * @example
+     * widget.top = 10;       // change top margin
+     * cc.log(widget.node.y); // not yet changed
+     * widget.updateAlignment();
+     * cc.log(widget.node.y); // changed
+     */
+    updateAlignment: function () {
+        WidgetManager.updateAlignment(this.node);
+    },
+});
+
+/**
+ * !#en
+ * When turned on, it will only be aligned once at the end of the onEnable frame,
+ * then immediately disables the current component.
+ * This will allow the script or animation to continue controlling the current node.
+ * Note: It will still be aligned at the frame when onEnable is called.
+ * !#zh
+ * 开启后仅会在 onEnable 的当帧结束时对齐一次，然后立刻禁用当前组件。
+ * 这样便于脚本或动画继续控制当前节点。
+ * 注意：onEnable 时所在的那一帧仍然会进行对齐。
+ * @property {Boolean} isAlignOnce
+ * @default false
+ * @deprecated
+ */
+Object.defineProperty(Widget.prototype, 'isAlignOnce', {
+    get () {
+        if (CC_DEBUG) {
+            cc.warn('`widget.isAlignOnce` is deprecated, use `widget.alignMode === cc.Widget.AlignMode.ONCE` instead please.');
+        }
+        return this.alignMode === AlignMode.ONCE;
+    },
+    set (value) {
+        if (CC_DEBUG) {
+            cc.warn('`widget.isAlignOnce` is deprecated, use `widget.alignMode = cc.Widget.AlignMode.*` instead please.');
+        }
+        this.alignMode = value ? AlignMode.ONCE : AlignMode.ALWAYS;
     }
 });
 

@@ -1,5 +1,6 @@
 /****************************************************************************
  Copyright (c) 2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
@@ -40,19 +41,8 @@
  * http://en.esotericsoftware.com/spine-using-runtimes
  */
 
-sp = CC_JSB ? sp : {};
-
-// The vertex index of spine.
-sp.VERTEX_INDEX = {
-    X1: 0,
-    Y1: 1,
-    X2: 2,
-    Y2: 3,
-    X3: 4,
-    Y3: 5,
-    X4: 6,
-    Y4: 7
-};
+var _global = typeof window === 'undefined' ? global : window;
+_global.sp = {};
 
 // The attachment type of spine. It contains three type: REGION(0), BOUNDING_BOX(1), MESH(2) and SKINNED_MESH.
 sp.ATTACHMENT_TYPE = {
@@ -75,52 +65,56 @@ sp.AnimationEventType = cc.Enum({
      */
     START: 0,
     /**
+     * !#en Another entry has replaced this entry as the current entry. This entry may continue being applied for mixing.
+     * !#zh 当前的 entry 被其他的 entry 替换。当使用 mixing 时，当前的 entry 会继续运行。
+     */
+    INTERRUPT: 1,
+    /**
      * !#en The play spine skeleton animation finish type.
      * !#zh 播放骨骼动画结束。
      * @property {Number} END
      */
-    END: 1,
+    END: 2,
+    /**
+     * !#en The entry will be disposed.
+     * !#zh entry 将被销毁。
+     */
+    DISPOSE: 3,
     /**
      * !#en The play spine skeleton animation complete type.
      * !#zh 播放骨骼动画完成。
      * @property {Number} COMPLETE
      */
-    COMPLETE: 2,
+    COMPLETE: 4,
     /**
      * !#en The spine skeleton animation event type.
      * !#zh 骨骼动画事件。
      * @property {Number} EVENT
      */
-    EVENT: 3
+    EVENT: 5
 });
 
 /**
  * @module sp
  */
-
 if (!CC_EDITOR || !Editor.isMainProcess) {
     
-    if (!CC_JSB) {
-        /**
-         * !#en
-         * The official spine runtime.<br/>
-         * See http://en.esotericsoftware.com/spine-using-runtimes
-         * !#zh
-         * 官方 Spine Runtime。<br/>
-         * 可查看 Spine 官方文档 http://en.esotericsoftware.com/spine-using-runtimes
-         * @property {object} spine
-         */
-        sp.spine = require('./lib/spine');
-    
-        require('./SGSkeleton');
-        require('./SGSkeletonCanvasRenderCmd');
-        require('./SGSkeletonWebGLRenderCmd');
-        require('./SGSkeletonAnimation');
-    }
-    
-    require('./SkeletonData');
+    sp.spine = require('./lib/spine');
+    require('./skeleton-texture');
+    require('./skeleton-data');
     require('./Skeleton');
+    require('./spine-assembler');
 }
 else {
-    require('./SkeletonData');
+    require('./skeleton-data');
 }
+
+/**
+ * !#en
+ * `sp.spine` is the namespace for official Spine Runtime, which officially implemented and maintained by Spine.<br>
+ * Please refer to the official documentation for its detailed usage: [http://en.esotericsoftware.com/spine-using-runtimes](http://en.esotericsoftware.com/spine-using-runtimes)
+ * !#zh
+ * sp.spine 模块是 Spine 官方运行库的 API 入口，由 Spine 官方统一实现和维护，具体用法请参考：[http://zh.esotericsoftware.com/spine-using-runtimes](http://zh.esotericsoftware.com/spine-using-runtimes)
+ * @module sp.spine
+ * @main sp.spine
+ */

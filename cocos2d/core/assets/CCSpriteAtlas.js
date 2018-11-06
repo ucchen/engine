@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -27,8 +28,7 @@
  * !#en Class for sprite atlas handling.
  * !#zh 精灵图集资源类。
  * @class SpriteAtlas
- * @extends RawAsset
- * @constructor
+ * @extends Asset
  */
 var SpriteAtlas = cc.Class({
     name: 'cc.SpriteAtlas',
@@ -42,7 +42,7 @@ var SpriteAtlas = cc.Class({
     /**
      * Returns the texture of the sprite atlas
      * @method getTexture
-     * @returns {cc.Texture2D}
+     * @returns {Texture2D}
      */
     getTexture: function () {
         var keys = Object.keys(this._spriteFrames);
@@ -59,23 +59,30 @@ var SpriteAtlas = cc.Class({
      * Returns the sprite frame correspond to the given key in sprite atlas.
      * @method getSpriteFrame
      * @param {String} key
-     * @returns {cc.SpriteFrame}
+     * @returns {SpriteFrame}
      */
     getSpriteFrame: function (key) {
-        return this._spriteFrames[key];
+        let sf = this._spriteFrames[key];
+        if (!sf) {
+            return null;
+        } 
+        if (!sf.name) {
+            sf.name = key;
+        }
+        return sf;
     },
 
     /**
      * Returns the sprite frames in sprite atlas.
      * @method getSpriteFrames
-     * @returns {[cc.SpriteFrame]}
+     * @returns {[SpriteFrame]}
      */
     getSpriteFrames: function () {
         var frames = [];
         var spriteFrames = this._spriteFrames;
-        
+
         for (var key in spriteFrames) {
-            frames.push(spriteFrames[key]);
+            frames.push(this.getSpriteFrame(key));
         }
 
         return frames;

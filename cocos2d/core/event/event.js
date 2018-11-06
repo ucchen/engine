@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,20 +24,18 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-var JS = require("../platform/js");
+var js = require("../platform/js");
 
 /**
  * !#en Base class of all kinds of events.
  * !#zh 包含事件相关信息的对象。
  * @class Event
- * @constructor
  */
 
 /**
- * @method Event
+ * @method constructor
  * @param {String} type - The name of the event (case-sensitive), e.g. "click", "fire", or "submit"
  * @param {Boolean} bubbles - A boolean indicating whether the event bubbles up through the tree or not
- * @return {Event}
  */
 cc.Event = function(type, bubbles) {
     /**
@@ -53,7 +52,7 @@ cc.Event = function(type, bubbles) {
      * @property bubbles
      * @type {Boolean}
      */
-    this.bubbles = bubbles || false;
+    this.bubbles = !!bubbles;
 
     /**
      * !#en A reference to the target to which the event was originally dispatched.
@@ -192,10 +191,43 @@ cc.Event.prototype = {
  * !#en Code for event without type.
  * !#zh 没有类型的事件
  * @property NO_TYPE
- * @final
+ * @static
  * @type {string}
  */
 cc.Event.NO_TYPE = 'no_type';
+
+/**
+ * !#en The type code of Touch event.
+ * !#zh 触摸事件类型
+ * @property TOUCH
+ * @static
+ * @type {String}
+ */
+cc.Event.TOUCH = 'touch';
+/**
+ * !#en The type code of Mouse event.
+ * !#zh 鼠标事件类型
+ * @property MOUSE
+ * @static
+ * @type {String}
+ */
+cc.Event.MOUSE = 'mouse';
+/**
+ * !#en The type code of Keyboard event.
+ * !#zh 键盘事件类型
+ * @property KEYBOARD
+ * @static
+ * @type {String}
+ */
+cc.Event.KEYBOARD = 'keyboard';
+/**
+ * !#en The type code of Acceleration event.
+ * !#zh 加速器事件类型
+ * @property ACCELERATION
+ * @static
+ * @type {String}
+ */
+cc.Event.ACCELERATION = 'acceleration';
 
 //event phase
 /**
@@ -203,7 +235,7 @@ cc.Event.NO_TYPE = 'no_type';
  * !#zh 尚未派发事件阶段
  * @property NONE
  * @type {Number}
- * @final
+ * @static
  */
 cc.Event.NONE = 0;
 /**
@@ -213,7 +245,7 @@ cc.Event.NONE = 0;
  * !#zh 捕获阶段，包括事件目标节点之前从根节点到最后一个节点的过程。
  * @property CAPTURING_PHASE
  * @type {Number}
- * @final
+ * @static
  */
 cc.Event.CAPTURING_PHASE = 1;
 /**
@@ -223,7 +255,7 @@ cc.Event.CAPTURING_PHASE = 1;
  * !#zh 目标阶段仅包括事件目标节点。
  * @property AT_TARGET
  * @type {Number}
- * @final
+ * @static
  */
 cc.Event.AT_TARGET = 2;
 /**
@@ -233,7 +265,7 @@ cc.Event.AT_TARGET = 2;
  * !#zh 冒泡阶段， 包括回程遇到到层次根节点的任何后续节点。
  * @property BUBBLING_PHASE
  * @type {Number}
- * @final
+ * @static
  */
 cc.Event.BUBBLING_PHASE = 3;
 
@@ -241,15 +273,14 @@ cc.Event.BUBBLING_PHASE = 3;
  * !#en The Custom event
  * !#zh 自定义事件
  * @class Event.EventCustom
- * @constructor
+ *
  * @extends Event
  */
 
 /**
- * @method EventCustom
+ * @method constructor
  * @param {String} type - The name of the event (case-sensitive), e.g. "click", "fire", or "submit"
  * @param {Boolean} bubbles - A boolean indicating whether the event bubbles up through the tree or not
- * @return {EventCustom}
  */
 var EventCustom = function (type, bubbles) {
     cc.Event.call(this, type, bubbles);
@@ -263,36 +294,53 @@ var EventCustom = function (type, bubbles) {
     this.detail = null;
 };
 
-JS.extend(EventCustom, cc.Event);
-JS.mixin(EventCustom.prototype, {
-    /**
-     * !#en Sets user data
-     * !#zh 设置用户数据
-     * @method setUserData
-     * @param {*} data
-     */
-    setUserData: function (data) {
-        this.detail = data;
-    },
+js.extend(EventCustom, cc.Event);
 
-    /**
-     * !#en Gets user data
-     * !#zh 获取用户数据
-     * @method getUserData
-     * @returns {*}
-     */
-    getUserData: function () {
-        return this.detail;
-    },
+EventCustom.prototype.reset = EventCustom;
 
-    /**
-     * !#en Gets event name
-     * !#zh 获取事件名称
-     * @method getEventName
-     * @returns {String}
-     */
-    getEventName: cc.Event.prototype.getType
-});
+/**
+ * !#en Sets user data
+ * !#zh 设置用户数据
+ * @method setUserData
+ * @param {*} data
+ */
+EventCustom.prototype.setUserData = function (data) {
+    this.detail = data;
+};
+
+/**
+ * !#en Gets user data
+ * !#zh 获取用户数据
+ * @method getUserData
+ * @returns {*}
+ */
+EventCustom.prototype.getUserData = function () {
+    return this.detail;
+};
+
+/**
+ * !#en Gets event name
+ * !#zh 获取事件名称
+ * @method getEventName
+ * @returns {String}
+ */
+EventCustom.prototype.getEventName = cc.Event.prototype.getType;
+
+var MAX_POOL_SIZE = 10;
+var _eventPool = new js.Pool(MAX_POOL_SIZE);
+EventCustom.put = function (event) {
+    _eventPool.put(event);
+};
+EventCustom.get = function (type, bubbles) {
+    var event = _eventPool._get();
+    if (event) {
+        event.reset(type, bubbles);
+    }
+    else {
+        event = new EventCustom(type, bubbles);
+    }
+    return event;
+};
 
 cc.Event.EventCustom = EventCustom;
 

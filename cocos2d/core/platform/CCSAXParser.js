@@ -1,7 +1,8 @@
 /****************************************************************************
  Copyright (c) 2008-2010 Ricardo Quesada
  Copyright (c) 2011-2012 cocos2d-x.org
- Copyright (c) 2013-2014 Chukong Technologies Inc.
+ Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
@@ -24,26 +25,23 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+var js = require('../platform/js');
+
 /**
  * A SAX Parser
  * @class saxParser
  */
-cc.SAXParser = cc._Class.extend(/** @lends cc.saxParser# */{
-    _parser: null,
-    _isSupportDOMParser: null,
-
-    /**
-     * Constructor of cc.SAXParser
-     */
-    ctor: function () {
-        if (window.DOMParser) {
-            this._isSupportDOMParser = true;
-            this._parser = new DOMParser();
-        } else {
-            this._isSupportDOMParser = false;
-        }
-    },
-
+cc.SAXParser = function () {
+    if (!(CC_EDITOR && Editor.isMainProcess) && window.DOMParser) {
+        this._isSupportDOMParser = true;
+        this._parser = new DOMParser();
+    } else {
+        this._isSupportDOMParser = false;
+        this._parser = null;
+    }
+};
+cc.SAXParser.prototype = {
+    constructor: cc.SAXParser,
     /**
      * @method parse
      * @param {String} xmlTxt
@@ -66,8 +64,7 @@ cc.SAXParser = cc._Class.extend(/** @lends cc.saxParser# */{
         }
         return xmlDoc;
     }
-
-});
+};
 
 /**
  *
@@ -75,8 +72,11 @@ cc.SAXParser = cc._Class.extend(/** @lends cc.saxParser# */{
  * @class plistParser
  * @extends SAXParser
  */
-cc.PlistParser = cc.SAXParser.extend(/** @lends cc.plistParser# */{
-
+cc.PlistParser = function () {
+    cc.SAXParser.call(this);
+};
+js.extend(cc.PlistParser, cc.SAXParser);
+js.mixin(cc.PlistParser.prototype, {
     /**
      * parse a xml string as plist object.
      * @param {String} xmlTxt - plist xml contents
@@ -86,7 +86,7 @@ cc.PlistParser = cc.SAXParser.extend(/** @lends cc.plistParser# */{
         var xmlDoc = this._parseXML(xmlTxt);
         var plist = xmlDoc.documentElement;
         if (plist.tagName !== 'plist') {
-            cc.warn("Not a plist file!");
+            cc.warnID(5100);
             return {};
         }
 
@@ -164,3 +164,8 @@ cc.saxParser = new cc.SAXParser();
  * A Plist Parser
  */
 cc.plistParser = new cc.PlistParser();
+
+module.exports = {
+    saxParser: cc.saxParser,
+    plistParser: cc.plistParser
+}

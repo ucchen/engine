@@ -1,18 +1,19 @@
 /****************************************************************************
  Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- http://www.cocos.com
+ https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
+  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
  to use Cocos Creator solely to develop games on your target platforms. You shall
   not use Cocos Creator software for developing other software or tools that's
   used for developing games. You are not granted to publish, distribute,
   sublicense, and/or sell copies of Cocos Creator.
 
  The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,6 +24,7 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+const NodeEvent = require('../CCNode').EventType;
 
 /**
  * !#en Enum for Layout type
@@ -31,26 +33,26 @@
  */
 var Type = cc.Enum({
     /**
-     * !#en TODO
+     * !#en None Layout
      * !#zh 取消布局
      *@property {Number} NONE
      */
     NONE: 0,
     /**
-     * !#en TODO
+     * !#en Horizontal Layout
      * !#zh 水平布局
      * @property {Number} HORIZONTAL
      */
     HORIZONTAL: 1,
 
     /**
-     * !#en TODO
+     * !#en Vertical Layout
      * !#zh 垂直布局
      * @property {Number} VERTICAL
      */
     VERTICAL: 2,
     /**
-     * !#en TODO
+     * !#en Grid Layout
      * !#zh 网格布局
      * @property {Number} GRID
      */
@@ -64,20 +66,20 @@ var Type = cc.Enum({
  */
 var ResizeMode = cc.Enum({
     /**
-     * !#en TODO
+     * !#en Don't do any scale.
      * !#zh 不做任何缩放
      * @property {Number} NONE
      */
     NONE: 0,
     /**
-     * !#en TODO
-     * !#zh 子节点的大小会随着容器的大小自动缩放。
+     * !#en The container size will be expanded with its children's size.
+     * !#zh 容器的大小会根据子节点的大小自动缩放。
      * @property {Number} CONTAINER
      */
     CONTAINER: 1,
     /**
-     * !#en TODO
-     * !#zh 容器的大小会根据子节点的大小自动缩放。
+     * !#en Child item size will be adjusted with the container's size.
+     * !#zh 子节点的大小会随着容器的大小自动缩放。
      * @property {Number} CHILDREN
      */
     CHILDREN: 2
@@ -85,18 +87,19 @@ var ResizeMode = cc.Enum({
 
 /**
  * !#en Enum for Grid Layout start axis direction.
+ * The items in grid layout will be arranged in each axis at first.;
  * !#zh 布局轴向，只用于 GRID 布局。
  * @enum Layout.AxisDirection
  */
 var AxisDirection = cc.Enum({
     /**
-     * !#en TODO
+     * !#en The horizontal axis.
      * !#zh 进行水平方向布局
      * @property {Number} HORIZONTAL
      */
     HORIZONTAL: 0,
     /**
-     * !#en TODO
+     * !#en The vertical axis.
      * !#zh 进行垂直方向布局
      * @property {Number} VERTICAL
      */
@@ -105,18 +108,19 @@ var AxisDirection = cc.Enum({
 
 /**
  * !#en Enum for vertical layout direction.
+ *  Used in Grid Layout together with AxisDirection is VERTICAL
  * !#zh 垂直方向布局方式
  * @enum Layout.VerticalDirection
  */
 var VerticalDirection = cc.Enum({
     /**
-     * !#en TODO
+     * !#en Items arranged from bottom to top.
      * !#zh 从下到上排列
      * @property {Number} BOTTOM_TO_TOP
      */
     BOTTOM_TO_TOP: 0,
     /**
-     * !#en TODO
+     * !#en Items arranged from top to bottom.
      * !#zh 从上到下排列
      * @property {Number} TOP_TO_BOTTOM
      */
@@ -125,18 +129,19 @@ var VerticalDirection = cc.Enum({
 
 /**
  * !#en Enum for horizontal layout direction.
+ *  Used in Grid Layout together with AxisDirection is HORIZONTAL
  * !#zh 水平方向布局方式
  * @enum Layout.HorizontalDirection
  */
 var HorizontalDirection = cc.Enum({
     /**
-     * !#en TODO
+     * !#en Items arranged from left to right.
      * !#zh 从左往右排列
      * @property {Number} LEFT_TO_RIGHT
      */
     LEFT_TO_RIGHT: 0,
     /**
-     * !#en TODO
+     * !#en Items arranged from right to left.
      * !#zh 从右往左排列
      *@property {Number} RIGHT_TO_LEFT
      */
@@ -144,8 +149,17 @@ var HorizontalDirection = cc.Enum({
 });
 
 /**
- * !#en The Layout is a container component, use it to arrange child elements easily.
- * !#zh Layout 组件相当于一个容器，能自动对它的所有子节点进行统一排版。
+ * !#en
+ * The Layout is a container component, use it to arrange child elements easily.<br>
+ * Note：<br>
+ * 1.Scaling and rotation of child nodes are not considered.<br>
+ * 2.After setting the Layout, the results need to be updated until the next frame,
+ * unless you manually call {{#crossLink "Layout/updateLayout:method"}}{{/crossLink}}。
+ * !#zh
+ * Layout 组件相当于一个容器，能自动对它的所有子节点进行统一排版。<br>
+ * 注意：<br>
+ * 1.不会考虑子节点的缩放和旋转。<br>
+ * 2.对 Layout 设置后结果需要到下一帧才会更新，除非你设置完以后手动调用 {{#crossLink "Layout/updateLayout:method"}}{{/crossLink}}。
  * @class Layout
  * @extends Component
  */
@@ -156,7 +170,7 @@ var Layout = cc.Class({
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.ui/Layout',
         help: 'i18n:COMPONENT.help_url.layout',
-        inspector: 'app://editor/page/inspector/cclayout.html',
+        inspector: 'packages://inspector/inspectors/comps/cclayout.js',
         executeInEditMode: true,
     },
 
@@ -179,10 +193,10 @@ var Layout = cc.Class({
          */
         type: {
             type: Type,
-            get: function() {
+            get: function () {
                 return this._N$layoutType;
             },
-            set: function(value) {
+            set: function (value) {
                 this._N$layoutType = value;
 
                 if (CC_EDITOR && this.type !== Type.NONE && this._resize === ResizeMode.CONTAINER && !cc.engine.isPlaying) {
@@ -193,8 +207,8 @@ var Layout = cc.Class({
                 }
                 this._doLayoutDirty();
             },
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.layout_type',
             animatable: false,
-            tooltip: 'i18n:COMPONENT.layout.layout_type'
         },
 
 
@@ -208,17 +222,18 @@ var Layout = cc.Class({
          */
         resizeMode: {
             type: ResizeMode,
-            tooltip: 'i18n:COMPONENT.layout.resize_mode',
-            get: function() {
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.resize_mode',
+            animatable: false,
+            get: function () {
                 return this._resize;
             },
-            set: function(value) {
+            set: function (value) {
                 if (this.type === Type.NONE && value === ResizeMode.CHILDREN) {
                     return;
                 }
 
                 this._resize = value;
-                if (CC_EDITOR && this.type !== Type.NONE && value === ResizeMode.CONTAINER && !cc.engine.isPlaying) {
+                if (CC_EDITOR && value === ResizeMode.CONTAINER && !cc.engine.isPlaying) {
                     var reLayouted = _Scene.DetectConflict.checkConflict_Layout(this);
                     if (reLayouted) {
                         return;
@@ -226,7 +241,6 @@ var Layout = cc.Class({
                 }
                 this._doLayoutDirty();
             },
-            animatable: false
         },
 
         /**
@@ -237,12 +251,11 @@ var Layout = cc.Class({
          */
         cellSize: {
             default: cc.size(40, 40),
-            tooltip: 'i18n:COMPONENT.layout.cell_size',
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.cell_size',
             type: cc.Size,
-            notify: function() {
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false
         },
 
         /**
@@ -254,9 +267,9 @@ var Layout = cc.Class({
          */
         startAxis: {
             default: AxisDirection.HORIZONTAL,
-            tooltip: 'i18n:COMPONENT.layout.start_axis',
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.start_axis',
             type: AxisDirection,
-            notify: function() {
+            notify: function () {
                 if (CC_EDITOR && this._resize === ResizeMode.CONTAINER && !cc.engine.isPlaying) {
                     var reLayouted = _Scene.DetectConflict.checkConflict_Layout(this);
                     if (reLayouted) {
@@ -267,18 +280,60 @@ var Layout = cc.Class({
             },
             animatable: false
         },
+
+        _N$padding: {
+            default: 0
+        },
         /**
-         * !#en The padding of layout, it only effect the layout in one direction.
-         * !#zh 容器内边距，只会在布局方向上生效。
-         * @property {Number} padding
+         * !#en The left padding of layout, it only effect the layout in one direction.
+         * !#zh 容器内左边距，只会在一个布局方向上生效。
+         * @property {Number} paddingLeft
          */
-        padding: {
+        paddingLeft: {
             default: 0,
-            tooltip: 'i18n:COMPONENT.layout.padding',
-            notify: function() {
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.padding_left',
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false,
+        },
+
+        /**
+         * !#en The right padding of layout, it only effect the layout in one direction.
+         * !#zh 容器内右边距，只会在一个布局方向上生效。
+         * @property {Number} paddingRight
+         */
+        paddingRight: {
+            default: 0,
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.padding_right',
+            notify: function () {
+                this._doLayoutDirty();
+            },
+        },
+
+        /**
+         * !#en The top padding of layout, it only effect the layout in one direction.
+         * !#zh 容器内上边距，只会在一个布局方向上生效。
+         * @property {Number} paddingTop
+         */
+        paddingTop: {
+            default: 0,
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.padding_top',
+            notify: function () {
+                this._doLayoutDirty();
+            },
+        },
+
+        /**
+         * !#en The bottom padding of layout, it only effect the layout in one direction.
+         * !#zh 容器内下边距，只会在一个布局方向上生效。
+         * @property {Number} paddingBottom
+         */
+        paddingBottom: {
+            default: 0,
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.padding_bottom',
+            notify: function () {
+                this._doLayoutDirty();
+            },
         },
 
         /**
@@ -288,11 +343,10 @@ var Layout = cc.Class({
          */
         spacingX: {
             default: 0,
-            notify: function() {
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false,
-            tooltip: 'i18n:COMPONENT.layout.space_x'
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.space_x'
         },
 
         /**
@@ -302,11 +356,10 @@ var Layout = cc.Class({
          */
         spacingY: {
             default: 0,
-            notify: function() {
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false,
-            tooltip: 'i18n:COMPONENT.layout.space_y'
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.space_y'
         },
 
         /**
@@ -319,11 +372,11 @@ var Layout = cc.Class({
         verticalDirection: {
             default: VerticalDirection.TOP_TO_BOTTOM,
             type: VerticalDirection,
-            notify: function() {
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false,
-            tooltip: 'i18n:COMPONENT.layout.vertical_direction'
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.vertical_direction',
+            animatable: false
         },
 
         /**
@@ -336,11 +389,11 @@ var Layout = cc.Class({
         horizontalDirection: {
             default: HorizontalDirection.LEFT_TO_RIGHT,
             type: HorizontalDirection,
-            notify: function() {
+            notify: function () {
                 this._doLayoutDirty();
             },
-            animatable: false,
-            tooltip: 'i18n:COMPONENT.layout.horizontal_direction'
+            tooltip: CC_DEV && 'i18n:COMPONENT.layout.horizontal_direction',
+            animatable: false
         },
     },
 
@@ -352,72 +405,115 @@ var Layout = cc.Class({
         AxisDirection: AxisDirection,
     },
 
-    __preload: function() {
-        if(cc.sizeEqualToSize(this.node.getContentSize(), cc.size(0, 0))) {
+    _migratePaddingData: function () {
+        this.paddingLeft = this._N$padding;
+        this.paddingRight = this._N$padding;
+        this.paddingTop = this._N$padding;
+        this.paddingBottom = this._N$padding;
+        this._N$padding = 0;
+    },
+
+    onEnable: function () {
+        this._addEventListeners();
+
+        if (this.node.getContentSize().equals(cc.size(0, 0))) {
             this.node.setContentSize(this._layoutSize);
         }
 
-        this.node.on('size-changed', this._resized, this);
+        if (this._N$padding !== 0) {
+            this._migratePaddingData();
+        }
 
-        this.node.on('anchor-changed', this._doLayoutDirty, this);
-        this.node.on('child-added', this._childAdded, this);
-        this.node.on('child-removed', this._childRemoved, this);
-        this.node.on('child-reorder', this._doLayoutDirty, this);
-
-        this._updateChildrenEventListener();
+        this._doLayoutDirty();
     },
 
-    _doLayoutDirty : function() {
+    onDisable: function () {
+        this._removeEventListeners();
+    },
+
+    _doLayoutDirty: function () {
         this._layoutDirty = true;
     },
 
-    _updateChildrenEventListener: function() {
-        var children = this.node.children;
-        children.forEach(function(child) {
-            child.on('size-changed', this._doLayoutDirty, this);
-            child.on('position-changed', this._doLayoutDirty, this);
-            child.on('anchor-changed', this._doLayoutDirty, this);
-            child.on('active-in-hierarchy-changed', this._doLayoutDirty, this);
-        }.bind(this));
+    _addEventListeners: function () {
+        cc.director.on(cc.Director.EVENT_AFTER_UPDATE, this.updateLayout, this);
+        this.node.on(NodeEvent.SIZE_CHANGED, this._resized, this);
+        this.node.on(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
+        this.node.on(NodeEvent.CHILD_ADDED, this._childAdded, this);
+        this.node.on(NodeEvent.CHILD_REMOVED, this._childRemoved, this);
+        this.node.on(NodeEvent.CHILD_REORDER, this._doLayoutDirty, this);
+        this._addChildrenEventListeners();
     },
 
-    _childAdded: function(event) {
-        var child = event.detail;
-        child.on('size-changed', this._doLayoutDirty, this);
-        child.on('position-changed', this._doLayoutDirty, this);
-        child.on('anchor-changed', this._doLayoutDirty, this);
+    _removeEventListeners: function () {
+        cc.director.off(cc.Director.EVENT_AFTER_UPDATE, this.updateLayout, this);
+        this.node.off(NodeEvent.SIZE_CHANGED, this._resized, this);
+        this.node.off(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
+        this.node.off(NodeEvent.CHILD_ADDED, this._childAdded, this);
+        this.node.off(NodeEvent.CHILD_REMOVED, this._childRemoved, this);
+        this.node.off(NodeEvent.CHILD_REORDER, this._doLayoutDirty, this);
+        this._removeChildrenEventListeners();
+    },
+
+    _addChildrenEventListeners: function () {
+        var children = this.node.children;
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            child.on(NodeEvent.SIZE_CHANGED, this._doLayoutDirty, this);
+            child.on(NodeEvent.POSITION_CHANGED, this._doLayoutDirty, this);
+            child.on(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
+            child.on('active-in-hierarchy-changed', this._doLayoutDirty, this);
+        }
+    },
+
+    _removeChildrenEventListeners: function () {
+        var children = this.node.children;
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            child.off(NodeEvent.SIZE_CHANGED, this._doLayoutDirty, this);
+            child.off(NodeEvent.POSITION_CHANGED, this._doLayoutDirty, this);
+            child.off(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
+            child.off('active-in-hierarchy-changed', this._doLayoutDirty, this);
+        }
+    },
+
+    _childAdded: function (child) {
+        child.on(NodeEvent.SIZE_CHANGED, this._doLayoutDirty, this);
+        child.on(NodeEvent.POSITION_CHANGED, this._doLayoutDirty, this);
+        child.on(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
         child.on('active-in-hierarchy-changed', this._doLayoutDirty, this);
 
         this._doLayoutDirty();
     },
 
-    _childRemoved: function(event) {
-        var child = event.detail;
-        child.off('size-changed', this._doLayoutDirty, this);
-        child.off('position-changed', this._doLayoutDirty, this);
-        child.off('anchor-changed', this._doLayoutDirty, this);
+    _childRemoved: function (child) {
+        child.off(NodeEvent.SIZE_CHANGED, this._doLayoutDirty, this);
+        child.off(NodeEvent.POSITION_CHANGED, this._doLayoutDirty, this);
+        child.off(NodeEvent.ANCHOR_CHANGED, this._doLayoutDirty, this);
         child.off('active-in-hierarchy-changed', this._doLayoutDirty, this);
 
         this._doLayoutDirty();
     },
 
-    _resized: function() {
+    _resized: function () {
         this._layoutSize = this.node.getContentSize();
         this._doLayoutDirty();
     },
 
-    _doLayoutHorizontally: function(baseWidth, rowBreak, fnPositionY, applyChildren) {
+    _doLayoutHorizontally: function (baseWidth, rowBreak, fnPositionY, applyChildren) {
         var layoutAnchor = this.node.getAnchorPoint();
         var children = this.node.children;
 
         var sign = 1;
+        var paddingX = this.paddingLeft;
         var leftBoundaryOfLayout = -layoutAnchor.x * baseWidth;
         if (this.horizontalDirection === HorizontalDirection.RIGHT_TO_LEFT) {
             sign = -1;
             leftBoundaryOfLayout = (1 - layoutAnchor.x) * baseWidth;
+            paddingX = this.paddingRight;
         }
 
-        var nextX = leftBoundaryOfLayout + sign * this.padding - sign * this.spacingX;
+        var nextX = leftBoundaryOfLayout + sign * paddingX - sign * this.spacingX;
         var rowMaxHeight = 0;
         var tempMaxHeight = 0;
         var secondMaxHeight = 0;
@@ -426,49 +522,62 @@ var Layout = cc.Class({
 
         var maxHeightChildAnchorY = 0;
 
-        var newChildWidth = this.cellSize.width;
-        if (this.type !== Type.GRID && this.resizeMode === ResizeMode.CHILDREN) {
-            newChildWidth = (baseWidth - 2 * this.padding - (children.length - 1) * this.spacingX) / children.length;
+        var activeChildCount = 0;
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            if (child.activeInHierarchy) {
+                activeChildCount++;
+            }
         }
 
-        children.forEach(function(child) {
+        var newChildWidth = this.cellSize.width;
+        if (this.type !== Type.GRID && this.resizeMode === ResizeMode.CHILDREN) {
+            newChildWidth = (baseWidth - (this.paddingLeft + this.paddingRight) - (activeChildCount - 1) * this.spacingX) / activeChildCount;
+        }
+
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            let childScaleX = Math.abs(child.scaleX);
+            let childScaleY = Math.abs(child.scaleY);
             if (!child.activeInHierarchy) {
-                return;
+                continue;
             }
             //for resizing children
             if (this._resize === ResizeMode.CHILDREN) {
-                child.width = newChildWidth;
+                child.width = newChildWidth / childScaleX;
                 if (this.type === Type.GRID) {
-                    child.height = this.cellSize.height;
+                    child.height = this.cellSize.height / childScaleY;
                 }
             }
 
             var anchorX = child.anchorX;
+            var childBoundingBoxWidth = child.width * childScaleX;
+            var childBoundingBoxHeight = child.height * childScaleY;
 
             if (secondMaxHeight > tempMaxHeight) {
                 tempMaxHeight = secondMaxHeight;
             }
 
-            if (child.height >= tempMaxHeight) {
+            if (childBoundingBoxHeight >= tempMaxHeight) {
                 secondMaxHeight = tempMaxHeight;
-                tempMaxHeight = child.height;
+                tempMaxHeight = childBoundingBoxHeight;
                 maxHeightChildAnchorY = child.getAnchorPoint().y;
             }
 
             if (this.horizontalDirection === HorizontalDirection.RIGHT_TO_LEFT) {
                 anchorX = 1 - child.anchorX;
             }
-            nextX = nextX + sign * anchorX * child.width + sign * this.spacingX;
-            var rightBoundaryOfChild = sign * (1 - anchorX) * child.width;
+            nextX = nextX + sign * anchorX * childBoundingBoxWidth + sign * this.spacingX;
+            var rightBoundaryOfChild = sign * (1 - anchorX) * childBoundingBoxWidth;
 
             if (rowBreak) {
-                var rowBreakBoundary = nextX + rightBoundaryOfChild + sign * this.padding;
+                var rowBreakBoundary = nextX + rightBoundaryOfChild + sign * (sign > 0 ? this.paddingRight : this.paddingLeft);
                 var leftToRightRowBreak = this.horizontalDirection === HorizontalDirection.LEFT_TO_RIGHT && rowBreakBoundary > (1 - layoutAnchor.x) * baseWidth;
                 var rightToLeftRowBreak = this.horizontalDirection === HorizontalDirection.RIGHT_TO_LEFT && rowBreakBoundary < -layoutAnchor.x * baseWidth;
 
                 if (leftToRightRowBreak || rightToLeftRowBreak) {
 
-                    if (child.height >= tempMaxHeight) {
+                    if (childBoundingBoxHeight >= tempMaxHeight) {
                         if (secondMaxHeight === 0) {
                             secondMaxHeight = tempMaxHeight;
                         }
@@ -477,43 +586,43 @@ var Layout = cc.Class({
                     }
                     else {
                         rowMaxHeight += tempMaxHeight;
-                        secondMaxHeight = child.height;
+                        secondMaxHeight = childBoundingBoxHeight;
                         tempMaxHeight = 0;
                     }
-                    nextX = leftBoundaryOfLayout + sign * (this.padding  + anchorX * child.width);
+                    nextX = leftBoundaryOfLayout + sign * (paddingX + anchorX * childBoundingBoxWidth);
                     row++;
                 }
             }
 
             var finalPositionY = fnPositionY(child, rowMaxHeight, row);
-            if(baseWidth >= (child.width + 2 * this.padding)) {
+            if (baseWidth >= (childBoundingBoxWidth + this.paddingLeft + this.paddingRight)) {
                 if (applyChildren) {
-                    child.setPosition(cc.p(nextX, finalPositionY));
+                    child.setPosition(cc.v2(nextX, finalPositionY));
                 }
             }
 
             var signX = 1;
             var tempFinalPositionY;
-            var topMarign = (tempMaxHeight === 0) ? child.height : tempMaxHeight;
+            var topMarign = (tempMaxHeight === 0) ? childBoundingBoxHeight : tempMaxHeight;
 
             if (this.verticalDirection === VerticalDirection.TOP_TO_BOTTOM) {
                 containerResizeBoundary = containerResizeBoundary || this.node._contentSize.height;
                 signX = -1;
-                tempFinalPositionY  = finalPositionY +  signX * (topMarign * maxHeightChildAnchorY + this.padding);
+                tempFinalPositionY = finalPositionY + signX * (topMarign * maxHeightChildAnchorY + this.paddingBottom);
                 if (tempFinalPositionY < containerResizeBoundary) {
                     containerResizeBoundary = tempFinalPositionY;
                 }
             }
             else {
                 containerResizeBoundary = containerResizeBoundary || -this.node._contentSize.height;
-                tempFinalPositionY  = finalPositionY +  signX * (topMarign * maxHeightChildAnchorY + this.padding);
+                tempFinalPositionY = finalPositionY + signX * (topMarign * maxHeightChildAnchorY + this.paddingTop);
                 if (tempFinalPositionY > containerResizeBoundary) {
                     containerResizeBoundary = tempFinalPositionY;
                 }
             }
 
             nextX += rightBoundaryOfChild;
-        }.bind(this));
+        }
 
         return containerResizeBoundary;
     },
@@ -522,15 +631,15 @@ var Layout = cc.Class({
         var newHeight = 0;
         var activeChildCount = 0;
         if (this.resizeMode === ResizeMode.CONTAINER) {
-            children.forEach(function(child) {
-                if (!child.activeInHierarchy) {
-                    return;
+            for (var i = 0; i < children.length; ++i) {
+                var child = children[i];
+                if (child.activeInHierarchy) {
+                    activeChildCount++;
+                    newHeight += child.height * Math.abs(child.scaleY);
                 }
-                activeChildCount++;
-                newHeight += child.height;
-            });
+            }
 
-            newHeight += (activeChildCount - 1) * this.spacingY + 2 * this.padding;
+            newHeight += (activeChildCount - 1) * this.spacingY + this.paddingBottom + this.paddingTop;
         }
         else {
             newHeight = this.node.getContentSize().height;
@@ -538,18 +647,20 @@ var Layout = cc.Class({
         return newHeight;
     },
 
-    _doLayoutVertically: function(baseHeight, columnBreak, fnPositionX, applyChildren) {
+    _doLayoutVertically: function (baseHeight, columnBreak, fnPositionX, applyChildren) {
         var layoutAnchor = this.node.getAnchorPoint();
         var children = this.node.children;
 
         var sign = 1;
+        var paddingY = this.paddingBottom;
         var bottomBoundaryOfLayout = -layoutAnchor.y * baseHeight;
         if (this.verticalDirection === VerticalDirection.TOP_TO_BOTTOM) {
             sign = -1;
             bottomBoundaryOfLayout = (1 - layoutAnchor.y) * baseHeight;
+            paddingY = this.paddingTop;
         }
 
-        var nextY = bottomBoundaryOfLayout + sign * this.padding - sign * this.spacingY;
+        var nextY = bottomBoundaryOfLayout + sign * paddingY - sign * this.spacingY;
         var columnMaxWidth = 0;
         var tempMaxWidth = 0;
         var secondMaxWidth = 0;
@@ -557,49 +668,62 @@ var Layout = cc.Class({
         var containerResizeBoundary = 0;
         var maxWidthChildAnchorX = 0;
 
-        var newChildHeight = this.cellSize.height;
-        if (this.type !== Type.GRID && this.resizeMode === ResizeMode.CHILDREN) {
-            newChildHeight = (baseHeight - 2 * this.padding - (children.length - 1) * this.spacingY) / children.length;
+        var activeChildCount = 0;
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            if (child.activeInHierarchy) {
+                activeChildCount++;
+            }
         }
 
-        children.forEach(function(child) {
+        var newChildHeight = this.cellSize.height;
+        if (this.type !== Type.GRID && this.resizeMode === ResizeMode.CHILDREN) {
+            newChildHeight = (baseHeight - (this.paddingTop + this.paddingBottom) - (activeChildCount - 1) * this.spacingY) / activeChildCount;
+        }
+
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            let childScaleX = Math.abs(child.scaleX);
+            let childScaleY = Math.abs(child.scaleY);
             if (!child.activeInHierarchy) {
-                return;
+                continue;
             }
 
             //for resizing children
             if (this.resizeMode === ResizeMode.CHILDREN) {
-                child.height = newChildHeight;
+                child.height = newChildHeight / childScaleY;
                 if (this.type === Type.GRID) {
-                    child.width = this.cellSize.width;
+                    child.width = this.cellSize.width / childScaleX;
                 }
             }
 
             var anchorY = child.anchorY;
+            var childBoundingBoxWidth = child.width * childScaleX;
+            var childBoundingBoxHeight = child.height * childScaleY;
 
             if (secondMaxWidth > tempMaxWidth) {
                 tempMaxWidth = secondMaxWidth;
             }
 
-            if (child.width >= tempMaxWidth) {
+            if (childBoundingBoxWidth >= tempMaxWidth) {
                 secondMaxWidth = tempMaxWidth;
-                tempMaxWidth = child.width;
+                tempMaxWidth = childBoundingBoxWidth;
                 maxWidthChildAnchorX = child.getAnchorPoint().x;
             }
 
             if (this.verticalDirection === VerticalDirection.TOP_TO_BOTTOM) {
                 anchorY = 1 - child.anchorY;
             }
-            nextY = nextY + sign * anchorY * child.height + sign * this.spacingY;
-            var topBoundaryOfChild = sign * (1 - anchorY) * child.height;
+            nextY = nextY + sign * anchorY * childBoundingBoxHeight + sign * this.spacingY;
+            var topBoundaryOfChild = sign * (1 - anchorY) * childBoundingBoxHeight;
 
             if (columnBreak) {
-                var columnBreakBoundary = nextY + topBoundaryOfChild + sign * this.padding;
+                var columnBreakBoundary = nextY + topBoundaryOfChild + sign * (sign > 0 ? this.paddingTop : this.paddingBottom);
                 var bottomToTopColumnBreak = this.verticalDirection === VerticalDirection.BOTTOM_TO_TOP && columnBreakBoundary > (1 - layoutAnchor.y) * baseHeight;
                 var topToBottomColumnBreak = this.verticalDirection === VerticalDirection.TOP_TO_BOTTOM && columnBreakBoundary < -layoutAnchor.y * baseHeight;
 
                 if (bottomToTopColumnBreak || topToBottomColumnBreak) {
-                    if (child.width >= tempMaxWidth) {
+                    if (childBoundingBoxWidth >= tempMaxWidth) {
                         if (secondMaxWidth === 0) {
                             secondMaxWidth = tempMaxWidth;
                         }
@@ -608,37 +732,37 @@ var Layout = cc.Class({
                     }
                     else {
                         columnMaxWidth += tempMaxWidth;
-                        secondMaxWidth = child.width;
+                        secondMaxWidth = childBoundingBoxWidth;
                         tempMaxWidth = 0;
                     }
-                    nextY = bottomBoundaryOfLayout + sign * (this.padding + anchorY * child.height);
+                    nextY = bottomBoundaryOfLayout + sign * (paddingY + anchorY * childBoundingBoxHeight);
                     column++;
                 }
             }
 
             var finalPositionX = fnPositionX(child, columnMaxWidth, column);
-            if (baseHeight >= (child.height + 2 * this.padding)) {
+            if (baseHeight >= (childBoundingBoxHeight + (this.paddingTop + this.paddingBottom))) {
                 if (applyChildren) {
-                    child.setPosition(cc.p(finalPositionX, nextY));
+                    child.setPosition(cc.v2(finalPositionX, nextY));
                 }
             }
 
             var signX = 1;
             var tempFinalPositionX;
             //when the item is the last column break item, the tempMaxWidth will be 0.
-            var rightMarign = (tempMaxWidth === 0) ? child.width : tempMaxWidth;
+            var rightMarign = (tempMaxWidth === 0) ? childBoundingBoxWidth : tempMaxWidth;
 
             if (this.horizontalDirection === HorizontalDirection.RIGHT_TO_LEFT) {
                 signX = -1;
                 containerResizeBoundary = containerResizeBoundary || this.node._contentSize.width;
-                tempFinalPositionX = finalPositionX + signX * (rightMarign * maxWidthChildAnchorX + this.padding);
+                tempFinalPositionX = finalPositionX + signX * (rightMarign * maxWidthChildAnchorX + this.paddingLeft);
                 if (tempFinalPositionX < containerResizeBoundary) {
                     containerResizeBoundary = tempFinalPositionX;
                 }
             }
             else {
                 containerResizeBoundary = containerResizeBoundary || -this.node._contentSize.width;
-                tempFinalPositionX = finalPositionX + signX * (rightMarign * maxWidthChildAnchorX + this.padding);
+                tempFinalPositionX = finalPositionX + signX * (rightMarign * maxWidthChildAnchorX + this.paddingRight);
                 if (tempFinalPositionX > containerResizeBoundary) {
                     containerResizeBoundary = tempFinalPositionX;
                 }
@@ -646,32 +770,34 @@ var Layout = cc.Class({
             }
 
             nextY += topBoundaryOfChild;
-        }.bind(this));
+        }
 
         return containerResizeBoundary;
     },
 
-    _doLayoutBasic: function() {
+    _doLayoutBasic: function () {
         var children = this.node.children;
 
         var allChildrenBoundingBox = null;
 
-        children.forEach(function(child){
-            if (!child.activeInHierarchy) {
-                return;
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i];
+            if (child.activeInHierarchy) {
+                if (!allChildrenBoundingBox) {
+                    allChildrenBoundingBox = child.getBoundingBoxToWorld();
+                } else {
+                    allChildrenBoundingBox.union(allChildrenBoundingBox, child.getBoundingBoxToWorld());
+                }
             }
-
-            if(!allChildrenBoundingBox){
-                allChildrenBoundingBox = child.getBoundingBoxToWorld();
-            } else {
-                allChildrenBoundingBox = cc.rectUnion(allChildrenBoundingBox, child.getBoundingBoxToWorld());
-            }
-        });
+        }
 
         if (allChildrenBoundingBox) {
-            var leftBottomInParentSpace = this.node.parent.convertToNodeSpaceAR(cc.p(allChildrenBoundingBox.x, allChildrenBoundingBox.y));
-            var rightTopInParentSpace = this.node.parent.convertToNodeSpaceAR(cc.p(allChildrenBoundingBox.x + allChildrenBoundingBox.width,
+            var leftBottomInParentSpace = this.node.parent.convertToNodeSpaceAR(cc.v2(allChildrenBoundingBox.x, allChildrenBoundingBox.y));
+            leftBottomInParentSpace = cc.v2(leftBottomInParentSpace.x - this.paddingLeft, leftBottomInParentSpace.y - this.paddingBottom);
+
+            var rightTopInParentSpace = this.node.parent.convertToNodeSpaceAR(cc.v2(allChildrenBoundingBox.x + allChildrenBoundingBox.width,
                                                                                    allChildrenBoundingBox.y + allChildrenBoundingBox.height));
+            rightTopInParentSpace = cc.v2(rightTopInParentSpace.x + this.paddingRight, rightTopInParentSpace.y + this.paddingTop);
 
             var newSize = cc.size(parseFloat((rightTopInParentSpace.x - leftBottomInParentSpace.x).toFixed(2)),
                                   parseFloat((rightTopInParentSpace.y - leftBottomInParentSpace.y).toFixed(2)));
@@ -679,7 +805,7 @@ var Layout = cc.Class({
             var layoutPosition = this.node.getPosition();
             var newAnchorX = (layoutPosition.x - leftBottomInParentSpace.x) / newSize.width;
             var newAnchorY = (layoutPosition.y - leftBottomInParentSpace.y) / newSize.height;
-            var newAnchor = cc.p(parseFloat(newAnchorX.toFixed(2)), parseFloat(newAnchorY.toFixed(2)));
+            var newAnchor = cc.v2(parseFloat(newAnchorX.toFixed(2)), parseFloat(newAnchorY.toFixed(2)));
 
             this.node.setAnchorPoint(newAnchor);
             this.node.setContentSize(newSize);
@@ -691,14 +817,15 @@ var Layout = cc.Class({
 
         var sign = 1;
         var bottomBoundaryOfLayout = -layoutAnchor.y * layoutSize.height;
-
+        var paddingY = this.paddingBottom;
         if (this.verticalDirection === VerticalDirection.TOP_TO_BOTTOM) {
             sign = -1;
             bottomBoundaryOfLayout = (1 - layoutAnchor.y) * layoutSize.height;
+            paddingY = this.paddingTop;
         }
 
-        var fnPositionY = function(child, topOffset, row) {
-            return bottomBoundaryOfLayout + sign * (topOffset + child.anchorY * child.height + this.padding + row * this.spacingY);
+        var fnPositionY = function (child, topOffset, row) {
+            return bottomBoundaryOfLayout + sign * (topOffset + child.anchorY * child.height * Math.abs(child.scaleY) + paddingY + row * this.spacingY);
         }.bind(this);
 
 
@@ -731,14 +858,15 @@ var Layout = cc.Class({
 
         var sign = 1;
         var leftBoundaryOfLayout = -layoutAnchor.x * layoutSize.width;
-
+        var paddingX = this.paddingLeft;
         if (this.horizontalDirection === HorizontalDirection.RIGHT_TO_LEFT) {
             sign = -1;
             leftBoundaryOfLayout = (1 - layoutAnchor.x) * layoutSize.width;
+            paddingX = this.paddingRight;
         }
 
-        var fnPositionX = function(child, leftOffset, column) {
-            return leftBoundaryOfLayout + sign * (leftOffset + child.anchorX * child.width + this.padding + column * this.spacingX);
+        var fnPositionX = function (child, leftOffset, column) {
+            return leftBoundaryOfLayout + sign * (leftOffset + child.anchorX * child.width * Math.abs(child.scaleX) + paddingX + column * this.spacingX);
         }.bind(this);
 
         var newWidth = 0;
@@ -764,7 +892,7 @@ var Layout = cc.Class({
         }
     },
 
-    _doLayoutGrid: function() {
+    _doLayoutGrid: function () {
         var layoutAnchor = this.node.getAnchorPoint();
         var layoutSize = this.node.getContentSize();
 
@@ -772,7 +900,7 @@ var Layout = cc.Class({
             this._doLayoutGridAxisHorizontal(layoutAnchor, layoutSize);
 
         }
-        else if(this.startAxis === AxisDirection.VERTICAL) {
+        else if (this.startAxis === AxisDirection.VERTICAL) {
             this._doLayoutGridAxisVertical(layoutAnchor, layoutSize);
         }
 
@@ -782,14 +910,14 @@ var Layout = cc.Class({
         var newWidth = 0;
         var activeChildCount = 0;
         if (this.resizeMode === ResizeMode.CONTAINER) {
-            children.forEach(function(child) {
-                if(!child.activeInHierarchy) {
-                    return;
+            for (var i = 0; i < children.length; ++i) {
+                var child = children[i];
+                if (child.activeInHierarchy) {
+                    activeChildCount++;
+                    newWidth += child.width * Math.abs(child.scaleX);
                 }
-                activeChildCount++;
-                newWidth += child.width;
-            });
-            newWidth += (activeChildCount - 1) * this.spacingX + 2 * this.padding;
+            }
+            newWidth += (activeChildCount - 1) * this.spacingX + this.paddingLeft + this.paddingRight;
         }
         else {
             newWidth = this.node.getContentSize().width;
@@ -797,23 +925,23 @@ var Layout = cc.Class({
         return newWidth;
     },
 
-    _doLayout: function() {
+    _doLayout: function () {
 
         if (this.type === Type.HORIZONTAL) {
             var newWidth = this._getHorizontalBaseWidth(this.node.children);
 
-            var fnPositionY = function(child) {
+            var fnPositionY = function (child) {
                 return child.y;
             };
 
-            this._doLayoutHorizontally( newWidth, false, fnPositionY, true);
+            this._doLayoutHorizontally(newWidth, false, fnPositionY, true);
 
             this.node.width = newWidth;
         }
         else if (this.type === Type.VERTICAL) {
             var newHeight = this._getVerticalBaseHeight(this.node.children);
 
-            var fnPositionX = function(child) {
+            var fnPositionX = function (child) {
                 return child.x;
             };
 
@@ -826,12 +954,25 @@ var Layout = cc.Class({
                 this._doLayoutBasic();
             }
         }
-        else if(this.type === Type.GRID) {
+        else if (this.type === Type.GRID) {
             this._doLayoutGrid();
         }
     },
 
-    lateUpdate: function() {
+    /**
+     * !#en Perform the layout update
+     * !#zh 立即执行更新布局
+     *
+     * @method updateLayout
+     *
+     * @example
+     * layout.type = cc.Layout.HORIZONTAL;
+     * layout.node.addChild(childNode);
+     * cc.log(childNode.x); // not yet changed
+     * layout.updateLayout();
+     * cc.log(childNode.x); // changed
+     */
+    updateLayout: function () {
         if (this._layoutDirty && this.node.children.length > 0) {
             this._doLayout();
             this._layoutDirty = false;
@@ -840,5 +981,22 @@ var Layout = cc.Class({
 
 });
 
+/**
+ * !#en The padding of layout, it effects the layout in four direction.
+ * !#zh 容器内边距，该属性会在四个布局方向上生效。
+ * @property {Number} padding
+ */
+Object.defineProperty(Layout.prototype, "padding", {
+    get: function () {
+        cc.warnID(4100);
+        return this.paddingLeft;
+    },
+    set: function (value) {
+        this._N$padding = value;
+
+        this._migratePaddingData();
+        this._doLayoutDirty();
+    }
+});
 
 cc.Layout = module.exports = Layout;
