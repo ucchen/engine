@@ -24,6 +24,17 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+let settingPlatform;
+ if (!CC_EDITOR) {
+    settingPlatform = window._CCSettings ? _CCSettings.platform: undefined;
+ }
+const isVivoGame = (settingPlatform === 'qgame');
+const isOppoGame = (settingPlatform === 'quickgame');
+const isHuaweiGame = (settingPlatform === 'huawei');
+const isJKWGame = (settingPlatform === 'jkw-game');
+
+const _global = typeof window === 'undefined' ? global : window;
+ 
 function initSys () {
     /**
      * System variables
@@ -354,6 +365,60 @@ function initSys () {
      */
     sys.FB_PLAYABLE_ADS = 106;
     /**
+     * @property {Number} BAIDU_GAME
+     * @readOnly
+     * @default 107
+     */
+    sys.BAIDU_GAME = 107;
+    /**
+     * @property {Number} VIVO_GAME
+     * @readOnly
+     * @default 108
+     */
+    sys.VIVO_GAME = 108;
+    /**
+     * @property {Number} OPPO_GAME
+     * @readOnly
+     * @default 109
+     */
+    sys.OPPO_GAME = 109;
+    /**
+     * @property {Number} HUAWEI_GAME
+     * @readOnly
+     * @default 110
+     */
+    sys.HUAWEI_GAME = 110;
+    /**
+     * @property {Number} XIAOMI_GAME
+     * @readOnly
+     * @default 111
+     */
+    sys.XIAOMI_GAME = 111;
+    /**
+     * @property {Number} JKW_GAME
+     * @readOnly
+     * @default 112
+     */
+    sys.JKW_GAME = 112;
+    /**
+     * @property {Number} ALIPAY_GAME
+     * @readOnly
+     * @default 113
+     */
+    sys.ALIPAY_GAME = 113;
+    /**
+     * @property {Number} WECHAT_GAME_SUB
+     * @readOnly
+     * @default 114
+     */
+    sys.WECHAT_GAME_SUB = 114;
+    /**
+     * @property {Number} BAIDU_GAME_SUB
+     * @readOnly
+     * @default 115
+     */
+    sys.BAIDU_GAME_SUB = 115;
+    /**
      * BROWSER_TYPE_WECHAT
      * @property {String} BROWSER_TYPE_WECHAT
      * @readOnly
@@ -375,6 +440,34 @@ function initSys () {
      */
     sys.BROWSER_TYPE_WECHAT_GAME_SUB = "wechatgamesub";
     /**
+     * BROWSER_TYPE_BAIDU_GAME
+     * @property {String} BROWSER_TYPE_BAIDU_GAME
+     * @readOnly
+     * @default "baidugame"
+     */
+    sys.BROWSER_TYPE_BAIDU_GAME = "baidugame";
+    /**
+     * BROWSER_TYPE_BAIDU_GAME_SUB
+     * @property {String} BROWSER_TYPE_BAIDU_GAME_SUB
+     * @readOnly
+     * @default "baidugamesub"
+     */
+    sys.BROWSER_TYPE_BAIDU_GAME_SUB = "baidugamesub";
+    /**
+     * BROWSER_TYPE_XIAOMI_GAME
+     * @property {String} BROWSER_TYPE_XIAOMI_GAME
+     * @readOnly
+     * @default "xiaomigame"
+     */
+    sys.BROWSER_TYPE_XIAOMI_GAME = "xiaomigame";
+    /**
+     * BROWSER_TYPE_ALIPAY_GAME
+     * @property {String} BROWSER_TYPE_ALIPAY_GAME
+     * @readOnly
+     * @default "alipaygame"
+     */
+    sys.BROWSER_TYPE_ALIPAY_GAME = "alipaygame";
+    /**
      * BROWSER_TYPE_QQ_PLAY
      * @property {String} BROWSER_TYPE_QQ_PLAY
      * @readOnly
@@ -395,6 +488,13 @@ function initSys () {
      * @default "ie"
      */
     sys.BROWSER_TYPE_IE = "ie";
+    /**
+     *
+     * @property {String} BROWSER_TYPE_EDGE
+     * @readOnly
+     * @default "edge"
+     */
+    sys.BROWSER_TYPE_EDGE = "edge";
     /**
      *
      * @property {String} BROWSER_TYPE_QQ
@@ -526,19 +626,58 @@ function initSys () {
      * Is native ? This is set to be true in jsb auto.
      * @property {Boolean} isNative
      */
-    sys.isNative = CC_JSB;
+    sys.isNative = CC_JSB || CC_RUNTIME;
 
 
     /**
      * Is web browser ?
      * @property {Boolean} isBrowser
      */
-    sys.isBrowser = typeof window === 'object' && typeof document === 'object' && !CC_WECHATGAME && !CC_QQPLAY && !CC_JSB;
+    sys.isBrowser = typeof window === 'object' && typeof document === 'object' && !CC_JSB && !CC_RUNTIME;
 
-    if (CC_EDITOR && Editor.isMainProcess) {
+    /**
+     * Is webgl extension support?
+     * @method glExtension
+     * @param name
+     */
+    sys.glExtension = function (name) {
+        // TODO: should check support on native platform
+        if (CC_JSB && CC_NATIVERENDERER) {
+            return true;
+        }
+        return !!cc.renderer.device.ext(name);
+    }
+
+    /**
+     * Get max joint matrix size for skinned mesh renderer.
+     * @method getMaxJointMatrixSize
+     */
+    sys.getMaxJointMatrixSize = function () {
+        if (!sys._maxJointMatrixSize) {
+            const JOINT_MATRICES_SIZE = 50;
+            const LEFT_UNIFORM_SIZE = 10;
+
+            let gl = cc.game._renderContext;
+            let maxUniforms = Math.floor(gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) / 4) - LEFT_UNIFORM_SIZE;
+            if (maxUniforms < JOINT_MATRICES_SIZE) {
+                sys._maxJointMatrixSize = 0;
+            }
+            else {
+                sys._maxJointMatrixSize = JOINT_MATRICES_SIZE;
+            }
+        }
+        return sys._maxJointMatrixSize;
+    }
+
+    if (_global.__globalAdapter && _global.__globalAdapter.adaptSys) {
+        // init sys info in adapter
+        _global.__globalAdapter.adaptSys(sys);
+    }
+    else if (CC_EDITOR && Editor.isMainProcess) {
         sys.isMobile = false;
         sys.platform = sys.EDITOR_CORE;
         sys.language = sys.LANGUAGE_UNKNOWN;
+        sys.languageCode = undefined;
         sys.os = ({
             darwin: sys.OS_OSX,
             win32: sys.OS_WINDOWS,
@@ -552,17 +691,40 @@ function initSys () {
         };
         sys.__audioSupport = {};
     }
-    else if (CC_JSB) {
-        var platform = sys.platform = __getPlatform();
+    else if (CC_JSB || CC_RUNTIME) {
+        let platform;
+        if (isVivoGame) {
+            platform = sys.VIVO_GAME;
+        } else if (isOppoGame) {
+            platform = sys.OPPO_GAME;
+        } else if (isHuaweiGame) {
+            platform = sys.HUAWEI_GAME;
+        } else if (isJKWGame) {
+            platform = sys.JKW_GAME;
+        }
+        else {
+            platform = __getPlatform();
+        }
+        sys.platform = platform;
         sys.isMobile = (platform === sys.ANDROID ||
                         platform === sys.IPAD ||
                         platform === sys.IPHONE ||
                         platform === sys.WP8 ||
                         platform === sys.TIZEN ||
-                        platform === sys.BLACKBERRY);
+                        platform === sys.BLACKBERRY ||
+                        platform === sys.XIAOMI_GAME ||
+                        isVivoGame ||
+                        isOppoGame ||
+                        isHuaweiGame ||
+                        isJKWGame);
 
         sys.os = __getOS();
         sys.language = __getCurrentLanguage();
+        var languageCode; 
+        if (CC_JSB) {
+            languageCode = __getCurrentLanguageCode();
+        }
+        sys.languageCode = languageCode ? languageCode.toLowerCase() : undefined;
         sys.osVersion = __getOSVersion();
         sys.osMainVersion = parseInt(sys.osVersion);
         sys.browserType = null;
@@ -602,108 +764,6 @@ function initSys () {
             format: ['.mp3']
         };
     }
-    else if (CC_WECHATGAME) {
-        var env = wx.getSystemInfoSync();
-        sys.isMobile = true;
-        sys.platform = sys.WECHAT_GAME;
-        sys.language = env.language.substr(0, 2);
-        var system = env.system.toLowerCase();
-        if (env.platform === "android") {
-            sys.os = sys.OS_ANDROID;
-        }
-        else if (env.platform === "ios") {
-            sys.os = sys.OS_IOS;
-        }
-        else if (env.platform === 'devtools') {
-            sys.isMobile = false;
-            if (system.indexOf('android') > -1) {
-                sys.os = sys.OS_ANDROID;
-            }
-            else if (system.indexOf('ios') > -1) {
-                sys.os = sys.OS_IOS;
-            }
-        }
-        // Adaptation to Android P
-        if (system === 'android p') {
-            system = 'android p 9.0';
-        }
-
-        var version = /[\d\.]+/.exec(system);
-        sys.osVersion = version ? version[0] : system;
-        sys.osMainVersion = parseInt(sys.osVersion);
-        // wechagame subdomain
-        if (!wx.getFileSystemManager) {
-            sys.browserType = sys.BROWSER_TYPE_WECHAT_GAME_SUB;
-        }
-        else {
-            sys.browserType = sys.BROWSER_TYPE_WECHAT_GAME;
-        }
-        sys.browserVersion = env.version;
-
-        var w = env.windowWidth;
-        var h = env.windowHeight;
-        var ratio = env.pixelRatio || 1;
-        sys.windowPixelResolution = {
-            width: ratio * w,
-            height: ratio * h
-        };
-
-        sys.localStorage = window.localStorage;
-
-        sys.capabilities = {
-            "canvas": true,
-            "opengl": (sys.browserType !== sys.BROWSER_TYPE_WECHAT_GAME_SUB),
-            "webp": false
-        };
-        sys.__audioSupport = {
-            ONLY_ONE: false,
-            WEB_AUDIO: false,
-            DELAY_CREATE_CTX: false,
-            format: ['.mp3']
-        };
-    }
-    else if (CC_QQPLAY) {
-        var env = window["BK"]["Director"]["queryDeviceInfo"]();
-        sys.isMobile = true;
-        sys.platform = sys.QQ_PLAY;
-        sys.language = sys.LANGUAGE_UNKNOWN;
-        if (env.platform === "android") {
-            sys.os = sys.OS_ANDROID;
-        }
-        else if (env.platform === "ios") {
-            sys.os = sys.OS_IOS;
-        }
-        else {
-            sys.os = sys.OS_UNKNOWN;
-        }
-        sys.osVersion = env.version;
-        sys.osMainVersion = parseInt(sys.osVersion.split('.')[0]);
-        sys.browserType = sys.BROWSER_TYPE_QQ_PLAY;
-        sys.browserVersion = 0;
-
-        var w = env.screenWidth;
-        var h = env.screenHeight;
-        var ratio = env.pixelRatio || 1;
-
-        sys.windowPixelResolution = {
-            width: ratio * w,
-            height: ratio * h
-        };
-
-        sys.localStorage = window.localStorage;
-
-        sys.capabilities = {
-            "canvas": false,
-            "opengl": true,
-            "webp": false
-        };
-        sys.__audioSupport = {
-            ONLY_ONE: false,
-            WEB_AUDIO: false,
-            DELAY_CREATE_CTX: false,
-            format: ['.mp3']
-        };
-    }
     else {
         // browser or runtime
         var win = window, nav = win.navigator, doc = document, docEle = doc.documentElement;
@@ -724,7 +784,7 @@ function initSys () {
              * Indicate the running platform
              * @property {Number} platform
              */
-            if (typeof FbPlayableAd !== undefined) {
+            if (typeof FbPlayableAd !== "undefined") {
                 sys.platform = sys.FB_PLAYABLE_ADS;
             }
             else {
@@ -734,6 +794,15 @@ function initSys () {
 
         var currLanguage = nav.language;
         currLanguage = currLanguage ? currLanguage : nav.browserLanguage;
+
+        /**
+         * Get current language iso 639-1 code.
+         * Examples of valid language codes include "zh-tw", "en", "en-us", "fr", "fr-fr", "es-es", etc.
+         * The actual value totally depends on results provided by destination platform.
+         * @property {String} languageCode
+         */
+        sys.languageCode = currLanguage.toLowerCase();
+
         currLanguage = currLanguage ? currLanguage.split("-")[0] : sys.LANGUAGE_ENGLISH;
 
         /**
@@ -744,7 +813,7 @@ function initSys () {
 
         // Get the os of system
         var isAndroid = false, iOS = false, osVersion = '', osMainVersion = 0;
-        var uaResult = /android (\d+(?:\.\d+)+)/i.exec(ua) || /android (\d+(?:\.\d+)+)/i.exec(nav.platform);
+        var uaResult = /android (\d+(?:\.\d+)*)/i.exec(ua) || /android (\d+(?:\.\d+)*)/i.exec(nav.platform);
         if (uaResult) {
             isAndroid = true;
             osVersion = uaResult[1] || '';
@@ -794,18 +863,15 @@ function initSys () {
         /* Determine the browser type */
         (function(){
             var typeReg1 = /mqqbrowser|micromessenger|qq|sogou|qzone|liebao|maxthon|ucbs|360 aphone|360browser|baiduboxapp|baidubrowser|maxthon|mxbrowser|miuibrowser/i;
-            var typeReg2 = /qqbrowser|ucbrowser/i;
+            var typeReg2 = /qqbrowser|ucbrowser|edge/i;
             var typeReg3 = /chrome|safari|firefox|trident|opera|opr\/|oupeng/i;
             var browserTypes = typeReg1.exec(ua);
             if(!browserTypes) browserTypes = typeReg2.exec(ua);
             if(!browserTypes) browserTypes = typeReg3.exec(ua);
 
             var browserType = browserTypes ? browserTypes[0].toLowerCase() : sys.BROWSER_TYPE_UNKNOWN;
-            if (CC_WECHATGAME)
-                browserType = sys.BROWSER_TYPE_WECHAT_GAME;
-            else if (CC_QQPLAY)
-                browserType = sys.BROWSER_TYPE_QQ_PLAY;
-            else if (browserType === 'micromessenger')
+
+            if (browserType === 'micromessenger')
                 browserType = sys.BROWSER_TYPE_WECHAT;
             else if (browserType === "safari" && isAndroid)
                 browserType = sys.BROWSER_TYPE_ANDROID;
@@ -813,6 +879,8 @@ function initSys () {
                 browserType = sys.BROWSER_TYPE_ANDROID;
             else if (browserType === "trident")
                 browserType = sys.BROWSER_TYPE_IE;
+            else if (browserType === 'edge')
+                browserType === sys.BROWSER_TYPE_EDGE;
             else if (browserType === "360 aphone")
                 browserType = sys.BROWSER_TYPE_360;
             else if (browserType === "mxbrowser")
@@ -830,7 +898,7 @@ function initSys () {
         sys.browserVersion = "";
         /* Determine the browser version number */
         (function(){
-            var versionReg1 = /(mqqbrowser|micromessenger|qq|sogou|qzone|liebao|maxthon|uc|ucbs|360 aphone|360|baiduboxapp|baidu|maxthon|mxbrowser|miui)(mobile)?(browser)?\/?([\d.]+)/i;
+            var versionReg1 = /(mqqbrowser|micromessenger|qq|sogou|qzone|liebao|maxthon|uc|ucbs|360 aphone|360|baiduboxapp|baidu|maxthon|mxbrowser|miui(?:.hybrid)?)(mobile)?(browser)?\/?([\d.]+)/i;
             var versionReg2 = /(qqbrowser|chrome|safari|firefox|trident|opera|opr\/|oupeng)(mobile)?(browser)?\/?([\d.]+)/i;
             var tmp = ua.match(versionReg1);
             if(!tmp) tmp = ua.match(versionReg2);
@@ -898,53 +966,11 @@ function initSys () {
         var _supportWebp = _tmpCanvas1.toDataURL('image/webp').startsWith('data:image/webp');
         var _supportCanvas = !!_tmpCanvas1.getContext("2d");
         var _supportWebGL = false;
-        if (sys.browserType === sys.BROWSER_TYPE_WECHAT_GAME) {
-            _supportWebGL = true;
+        if (CC_TEST) {
+            _supportWebGL = false;
         }
         else if (win.WebGLRenderingContext) {
-            if (create3DContext(document.createElement("CANVAS"))) {
-                _supportWebGL = true;
-            }
-            if (_supportWebGL && sys.os === sys.OS_ANDROID) {
-                var browserVer = parseFloat(sys.browserVersion);
-                switch (sys.browserType) {
-                case sys.BROWSER_TYPE_MOBILE_QQ:
-                case sys.BROWSER_TYPE_BAIDU:
-                case sys.BROWSER_TYPE_BAIDU_APP:
-                    // QQ & Baidu Brwoser 6.2+ (using blink kernel)
-                    if (browserVer >= 6.2) {
-                        _supportWebGL = true;
-                    }
-                    else {
-                        _supportWebGL = false;
-                    }
-                    break;
-                case sys.BROWSER_TYPE_ANDROID:
-                    // Android 5+ default browser
-                    if (sys.osMainVersion && sys.osMainVersion >= 5) {
-                        _supportWebGL = true;
-                    }
-                    break;
-                case sys.BROWSER_TYPE_CHROME:
-                    // Chrome on android supports WebGL from v. 30
-                    if (browserVer >= 30.0) {
-                        _supportWebGL = true;
-                    } else {
-                        _supportWebGL = false;
-                    }
-                    break;
-                case sys.BROWSER_TYPE_UC:
-                    if (browserVer > 11.0) {
-                        _supportWebGL = true;
-                    } else {
-                        _supportWebGL = false;
-                    }
-                    break;
-                case sys.BROWSER_TYPE_360:
-                    _supportWebGL = false;
-                    break;
-                }
-            }
+            _supportWebGL = true;
         }
 
         /**
@@ -988,8 +1014,7 @@ function initSys () {
 
             // check if browser supports Web Audio
             // check Web Audio's context
-            var supportWebAudio = sys.browserType !== sys.BROWSER_TYPE_WECHAT_GAME &&
-                                !!(window.AudioContext || window.webkitAudioContext || window.mozAudioContext);
+            var supportWebAudio = !!(window.AudioContext || window.webkitAudioContext || window.mozAudioContext);
 
             __audioSupport = { ONLY_ONE: false, WEB_AUDIO: supportWebAudio, DELAY_CREATE_CTX: false };
 
@@ -1143,17 +1168,17 @@ function initSys () {
     };
 
     /**
-     * !#en 
-     * Return the safe area rect. only available on the iOS device. <br/>
-     * when the safeArea rect is unavailable, it will return a rect with design resolution size.
+     * !#en
+     * Return the safe area rect. <br/>
+     * only available on the iOS native platform, otherwise it will return a rect with design resolution size.
      * !#zh
-     * 返回手机屏幕安全区域，目前仅在 iOS 设备上有效。其它平台将默认返回设计分辨率尺寸。
+     * 返回手机屏幕安全区域，目前仅在 iOS 原生平台有效。其它平台将默认返回设计分辨率尺寸。
      * @method getSafeAreaRect
      * @return {Rect}
     */
     sys.getSafeAreaRect = function () {
-        let designSize = cc.view.getDesignResolutionSize();
-        return cc.rect(0, 0, designSize.width, designSize.height);
+        let visibleSize = cc.view.getVisibleSize();
+        return cc.rect(0, 0, visibleSize.width, visibleSize.height);
     };
 
     /**
@@ -1196,7 +1221,7 @@ function initSys () {
      * @param {String} url
      */
     sys.openURL = function (url) {
-        if (CC_JSB) {
+        if (CC_JSB || CC_RUNTIME) {
             jsb.openURL(url);
         }
         else {

@@ -1,14 +1,32 @@
+/****************************************************************************
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated engine source code (the "Software"), a limited,
+ worldwide, royalty-free, non-assignable, revocable and non-exclusive license
+ to use Cocos Creator solely to develop games on your target platforms. You shall
+ not use Cocos Creator software for developing other software or tools that's
+ used for developing games. You are not granted to publish, distribute,
+ sublicense, and/or sell copies of Cocos Creator.
+
+ The software or tools in this License Agreement are licensed, not sold.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ ****************************************************************************/
 
 const Helper = require('../../../../graphics/helper');
 const PointFlags = require('../../../../graphics/types').PointFlags;
-const MeshBuffer = require('../../mesh-buffer');
-const vfmtPosColor = require('../../vertex-format').vfmtPosColor;
-const renderer = require('../../../index');
-const renderEngine = renderer.renderEngine;
-const IARenderData = renderEngine.IARenderData;
-const InputAssembler = renderEngine.InputAssembler;
 
-let Point = cc.Class({
+let Point = cc.Graphics.Point = cc.Class({
     name: 'cc.GraphicsPoint',
     extends: cc.Vec2,
 
@@ -63,10 +81,6 @@ function Impl (graphics) {
 
     this._paths = [];
     this._points = [];
-
-    this._renderDatas = [];
-    
-    this._dataOffset = 0;
 }
 
 cc.js.mixin(Impl.prototype, {
@@ -139,34 +153,16 @@ cc.js.mixin(Impl.prototype, {
         this._curPath.complex = false;
     },
 
-    clear (comp, clean) {
+    clear (clean) {
         this._pathLength = 0;
         this._pathOffset = 0;
         this._pointsOffset = 0;
-        
-        this._dataOffset = 0;
-        
+      
         this._curPath = null;
-    
-        let datas = this._renderDatas;
+
         if (clean) {
             this._paths.length = 0;
             this._points.length = 0;
-            // manually destroy render datas
-            for (let i = 0, l = datas.length; i < l; i++) {
-                let data = datas[i];
-                data.meshbuffer.destroy();
-                data.meshbuffer = null;
-            }
-            datas.length = 0;
-        }
-        else {
-            for (let i = 0, l = datas.length; i < l; i++) {
-                let data = datas[i];
-
-                let meshbuffer = data.meshbuffer;
-                meshbuffer.reset();
-            }
         }
     },
 
@@ -215,28 +211,7 @@ cc.js.mixin(Impl.prototype, {
         pathPoints.push(pt);
     },
 
-    requestRenderData () {
-        let renderData = new IARenderData();
-        let meshbuffer = new MeshBuffer(renderer._handle, vfmtPosColor);
-        renderData.meshbuffer = meshbuffer;
-        this._renderDatas.push(renderData);
-
-        let ia = new InputAssembler();
-        ia._vertexBuffer = meshbuffer._vb;
-        ia._indexBuffer = meshbuffer._ib;
-        ia._start = 0;
-        renderData.ia = ia;
-
-        return renderData;
-    },
-
-    getRenderDatas () {
-        if (this._renderDatas.length === 0) {
-            this.requestRenderData();
-        }
-
-        return this._renderDatas;
-    }
 });
 
+cc.Graphics._Impl = Impl;
 module.exports = Impl;

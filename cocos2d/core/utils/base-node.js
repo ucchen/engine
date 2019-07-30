@@ -146,14 +146,6 @@ var BaseNode = cc.Class({
         _active: true,
 
         /**
-         * @property _level
-         * @type {Number}
-         * @default 0
-         * @private
-         */
-        _level: 0,
-
-        /**
          * @property _components
          * @type {Component[]}
          * @default []
@@ -213,6 +205,9 @@ var BaseNode = cc.Class({
                     return;
                 }
                 this._name = value;
+                if (CC_JSB && CC_NATIVERENDERER) {
+                    this._proxy.setName(this._name);
+                }
             },
         },
 
@@ -333,8 +328,6 @@ var BaseNode = cc.Class({
          * @private
          */
         this.__eventTargets = [];
-
-        this._renderFlag = RenderFlow.FLAG_TRANSFORM;
     },
     /** 
      * !#en The parent of the node.
@@ -385,7 +378,6 @@ var BaseNode = cc.Class({
             if (CC_DEBUG && (value._objFlags & Deactivating)) {
                 cc.errorID(3821);
             }
-            this._level = value._level + 1;
             eventManager._setDirtyForNode(this);
             value._children.push(this);
             value.emit && value.emit(CHILD_ADDED, this);
@@ -1089,30 +1081,9 @@ var BaseNode = cc.Class({
         }
     },
 
-    _disableChildComps () {
-        // leave this._activeInHierarchy unmodified
-        var i, len = this._components.length;
-        for (i = 0; i < len; ++i) {
-            var component = this._components[i];
-            if (component._enabled) {
-                cc.director._compScheduler.disableComp(component);
-            }
-        }
-        // deactivate recursively
-        for (i = 0, len = this._children.length; i < len; ++i) {
-            var node = this._children[i];
-            if (node._active) {
-                node._disableChildComps();
-            }
-        }
-    },
-
     destroy () {
         if (cc.Object.prototype.destroy.call(this)) {
-            // disable hierarchy
-            if (this._activeInHierarchy) {
-                this._disableChildComps();
-            }
+            this.active = false;
         }
     },
 

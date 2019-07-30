@@ -13,6 +13,7 @@
     "./cocos2d/animation/animation-state.js",
     "./cocos2d/animation/animation-animator.js",
     "./cocos2d/animation/playable.js",
+    "./cocos2d/animation/easing.js",
 
     "./cocos2d/audio/**/*",
 
@@ -25,6 +26,9 @@
     "./cocos2d/core/CCScheduler.js",
 
     "./cocos2d/core/assets/**/*",
+    "./cocos2d/core/3d/**/*",
+
+    "./cocos2d/core/mesh/**/*",
 
     "./cocos2d/core/camera/CCCamera.js",
 
@@ -76,7 +80,6 @@
 
     "./cocos2d/webview/CCWebView.js",
 
-    "./extensions/anysdk/*.js",
     "./extensions/ccpool/*.js",
     "./extensions/spine/*.js",
     "./extensions/dragonbones/*.js"

@@ -165,14 +165,15 @@ var NodeActivator = cc.Class({
                 --originCount;
             }
         }
+        node._childArrivalOrder = node._children.length;
         // activate children recursively
         for (let i = 0, len = node._children.length; i < len; ++i) {
             let child = node._children[i];
+            child._localZOrder = (child._localZOrder & 0xffff0000) | (i + 1);
             if (child._active) {
                 this._activateNodeRecursively(child, preloadInvoker, onLoadInvoker, onEnableInvoker);
             }
         }
-
         node._onPostActivated(true);
     },
 
@@ -248,7 +249,7 @@ var NodeActivator = cc.Class({
 
     activateComp: CC_EDITOR ? function (comp, preloadInvoker, onLoadInvoker, onEnableInvoker) {
         if (!cc.isValid(comp, true)) {
-            // destroied before activating
+            // destroyed before activating
             return;
         }
         if (cc.engine._isPlaying || comp.constructor._executeInEditMode) {
@@ -288,7 +289,7 @@ var NodeActivator = cc.Class({
         }
     } : function (comp, preloadInvoker, onLoadInvoker, onEnableInvoker) {
         if (!cc.isValid(comp, true)) {
-            // destroied before activating
+            // destroyed before activating
             return;
         }
         if (!(comp._objFlags & IsPreloadStarted)) {
@@ -333,6 +334,7 @@ var NodeActivator = cc.Class({
         if (comp.onDestroy && (comp._objFlags & IsOnLoadCalled)) {
             if (cc.engine._isPlaying || comp.constructor._executeInEditMode) {
                 callOnDestroyInTryCatch(comp);
+                comp._objFlags &= ~IsOnLoadCalled;  // In case call onDestroy twice in undo operation
             }
         }
     } : function (comp) {

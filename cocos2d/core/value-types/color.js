@@ -24,8 +24,11 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-var ValueType = require('./value-type');
+import { color4 } from '../vmath';
+
+ var ValueType = require('./value-type');
 var js = require('../platform/js');
+
 
 var Color = (function () {
 
@@ -211,7 +214,7 @@ var Color = (function () {
      * @param {number} ratio - the interpolation coefficient.
      * @param {Color} [out] - optional, the receiving vector.
      * @return {Color}
-     * @example {@link utils/api/engine/docs/cocos2d/core/value-types/CCColor/lerp.js}
+     * @example {@link cocos2d/core/value-types/CCColor/lerp.js}
      */
     proto.lerp = function (to, ratio, out) {
         out = out || new Color();
@@ -336,8 +339,12 @@ var Color = (function () {
      */
     proto.setA = function (alpha) {
         alpha = ~~cc.misc.clampf(alpha, 0, 255);
-        this._val = ((this._val & 0x00ffffff) | ((alpha << 24) >>> 0)) >>> 0;
+        this._val = ((this._val & 0x00ffffff) | (alpha << 24)) >>> 0;
         return this;
+    };
+
+    proto._fastSetA = function (alpha) {
+        this._val = ((this._val & 0x00ffffff) | (alpha << 24)) >>> 0;
     };
 
     js.getset(proto, 'r', proto.getR, proto.setR, true);
@@ -351,7 +358,7 @@ var Color = (function () {
      * @method toCSS
      * @param {String} opt - "rgba", "rgb", "#rgb" or "#rrggbb".
      * @return {String}
-     * @example {@link utils/api/engine/docs/cocos2d/core/value-types/CCColor/toCSS.js}
+     * @example {@link cocos2d/core/value-types/CCColor/toCSS.js}
      */
     proto.toCSS = function ( opt ) {
         if ( opt === 'rgba' ) {
@@ -408,10 +415,11 @@ var Color = (function () {
      * color.toHEX("#rrggbb");  // "000000";
      */
     proto.toHEX = function ( fmt ) {
-        var hex = [
-            (this.r | 0 ).toString(16),
-            (this.g | 0 ).toString(16),
-            (this.b | 0 ).toString(16)
+        let prefix = '0';
+        let hex = [
+            (this.r < 16 ? prefix : '') + (this.r | 0).toString(16),
+            (this.g < 16 ? prefix : '') + (this.g | 0).toString(16),
+            (this.b < 16 ? prefix : '') + (this.b | 0).toString(16),
         ];
         var i = -1;
         if ( fmt === '#rgb' ) {
@@ -428,13 +436,8 @@ var Color = (function () {
                 }
             }
         }
-        else if ( fmt === '#rrggbbaa' ) {
-            hex.push((this.a | 0 ).toString(16));
-            for ( i = 0; i < hex.length; ++i ) {
-                if ( hex[i].length === 1 ) {
-                    hex[i] = '0' + hex[i];
-                }
-            }
+        else if (fmt === '#rrggbbaa') {
+            hex.push((this.a < 16 ? prefix : '') + (this.a | 0).toString(16));
         }
         return hex.join('');
     };
@@ -573,6 +576,10 @@ var Color = (function () {
         }
     };
 
+    proto.array = function (out) {
+        color4.array(out, this);
+    }
+
     return Color;
 })();
 
@@ -597,7 +604,7 @@ cc.Color = Color;
  * @param {Number} [b=0]
  * @param {Number} [a=255]
  * @return {Color}
- * @example {@link utils/api/engine/docs/cocos2d/core/value-types/CCColor/color.js}
+ * @example {@link cocos2d/core/value-types/CCColor/color.js}
  */
 cc.color = function color (r, g, b, a) {
     if (typeof r === 'string') {

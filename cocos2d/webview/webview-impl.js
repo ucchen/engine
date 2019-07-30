@@ -23,12 +23,12 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+import { mat4 } from '../core/vmath';
+
 const utils = require('../core/platform/utils');
 const sys = require('../core/platform/CCSys');
-const renderEngine = require('../core/renderer/render-engine');
-const math = renderEngine.math;
 
-let _mat4_temp = math.mat4.create();
+let _mat4_temp = mat4.create();
 
 let WebViewImpl = cc.Class({
     name: "WebViewImpl",
@@ -182,6 +182,7 @@ let WebViewImpl = cc.Class({
 
     setOnJSCallback (callback) {},
     setJavascriptInterfaceScheme (scheme) {},
+    // private method
     loadData (data, MIMEType, encoding, baseURL) {},
     loadHTMLString (string, baseURL) {},
 
@@ -343,21 +344,27 @@ let WebViewImpl = cc.Class({
         if (!this._div || !this._visible) return;
 
         node.getWorldMatrix(_mat4_temp);
+        let renderCamera = cc.Camera._findRendererCamera(node);
+        if (renderCamera) {
+            renderCamera.worldMatrixToScreen(_mat4_temp, _mat4_temp, cc.visibleRect.width, cc.visibleRect.height);
+        }
+
+        let _mat4_tempm = _mat4_temp.m;
         if (!this._forceUpdate &&
-            this._m00 === _mat4_temp.m00 && this._m01 === _mat4_temp.m01 &&
-            this._m04 === _mat4_temp.m04 && this._m05 === _mat4_temp.m05 &&
-            this._m12 === _mat4_temp.m12 && this._m13 === _mat4_temp.m13 &&
+            this._m00 === _mat4_tempm[0] && this._m01 === _mat4_tempm[1] &&
+            this._m04 === _mat4_tempm[4] && this._m05 === _mat4_tempm[5] &&
+            this._m12 === _mat4_tempm[12] && this._m13 === _mat4_tempm[13] &&
             this._w === node._contentSize.width && this._h === node._contentSize.height) {
             return;
         }
 
         // update matrix cache
-        this._m00 = _mat4_temp.m00;
-        this._m01 = _mat4_temp.m01;
-        this._m04 = _mat4_temp.m04;
-        this._m05 = _mat4_temp.m05;
-        this._m12 = _mat4_temp.m12;
-        this._m13 = _mat4_temp.m13;
+        this._m00 = _mat4_tempm[0];
+        this._m01 = _mat4_tempm[1];
+        this._m04 = _mat4_tempm[4];
+        this._m05 = _mat4_tempm[5];
+        this._m12 = _mat4_tempm[12];
+        this._m13 = _mat4_tempm[13];
         this._w = node._contentSize.width;
         this._h = node._contentSize.height;
 
@@ -368,16 +375,21 @@ let WebViewImpl = cc.Class({
         scaleY /= dpr;
 
         let container = cc.game.container;
-        let a = _mat4_temp.m00 * scaleX, b = _mat4_temp.m01, c = _mat4_temp.m04, d = _mat4_temp.m05 * scaleY;
+        let a = _mat4_tempm[0] * scaleX, b = _mat4_tempm[1], c = _mat4_tempm[4], d = _mat4_tempm[5] * scaleY;
 
         let offsetX = container && container.style.paddingLeft ? parseInt(container.style.paddingLeft) : 0;
         let offsetY = container && container.style.paddingBottom ? parseInt(container.style.paddingBottom) : 0;
         this._updateSize(this._w, this._h);
         let w = this._div.clientWidth * scaleX;
         let h = this._div.clientHeight * scaleY;
-        let appx = (w * _mat4_temp.m00) * node._anchorPoint.x;
-        let appy = (h * _mat4_temp.m05) * node._anchorPoint.y;
-        let tx = _mat4_temp.m12 * scaleX - appx + offsetX, ty = _mat4_temp.m13 * scaleY - appy + offsetY;
+        let appx = (w * _mat4_tempm[0]) * node._anchorPoint.x;
+        let appy = (h * _mat4_tempm[5]) * node._anchorPoint.y;
+
+        let viewport = cc.view._viewportRect;
+        offsetX += viewport.x / dpr;
+        offsetY += viewport.y / dpr;
+
+        let tx = _mat4_tempm[12] * scaleX - appx + offsetX, ty = _mat4_tempm[13] * scaleY - appy + offsetY;
 
         let matrix = "matrix(" + a + "," + -b + "," + -c + "," + d + "," + tx + "," + -ty + ")";
         this._div.style['transform'] = matrix;

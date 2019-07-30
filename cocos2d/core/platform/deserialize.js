@@ -219,7 +219,15 @@ var _Deserializer = (function () {
         var obj = null;     // the obj to return
         var klass = null;
         var type = serialized.__type__;
-        if (type) {
+        if (type === 'TypedArray') {
+            var array = serialized.array;
+            obj = new window[serialized.ctor](array.length);
+            for (var i = 0; i < array.length; ++i) {
+                obj[i] = array[i];
+            }
+            return obj;
+        }
+        else if (type) {
 
             // Type Object (including CCClass)
 
@@ -385,10 +393,17 @@ var _Deserializer = (function () {
     //     }
     // }
 
+    // deserialize ValueType
     prototype._deserializeTypedObject = function (instance, serialized, klass) {
         if (klass === cc.Vec2) {
             instance.x = serialized.x || 0;
             instance.y = serialized.y || 0;
+            return;
+        }
+        else if (klass === cc.Vec3) {
+            instance.x = serialized.x || 0;
+            instance.y = serialized.y || 0;
+            instance.z = serialized.z || 0;
             return;
         }
         else if (klass === cc.Color) {
@@ -405,28 +420,33 @@ var _Deserializer = (function () {
             return;
         }
 
-        var fastDefinedProps = klass.__props__;
-        if (!fastDefinedProps) {
-            fastDefinedProps = Object.keys(instance);    // 遍历 instance，如果具有类型，才不会把 __type__ 也读进来
-        }
+        var DEFAULT = Attr.DELIMETER + 'default';
+        var attrs = Attr.getClassAttrs(klass);
+        var fastDefinedProps = klass.__props__ ||
+                               Object.keys(instance);    // 遍历 instance，如果具有类型，才不会把 __type__ 也读进来
         for (var i = 0; i < fastDefinedProps.length; i++) {
             var propName = fastDefinedProps[i];
-            var prop = serialized[propName];
-            if (prop !== undefined && serialized.hasOwnProperty(propName)) {
-                if (typeof prop !== 'object') {
-                    instance[propName] = prop;
-                }
-                else if (prop) {
-                    if (CC_EDITOR || CC_TEST) {
-                        this._deserializeObjField(instance, prop, propName, this._target && instance);
-                    }
-                    else {
-                        this._deserializeObjField(instance, prop, propName);
-                    }
+            var value = serialized[propName];
+            if (value === undefined || !serialized.hasOwnProperty(propName)) {
+                // not serialized,
+                // recover to default value in ValueType, because eliminated properties equals to
+                // its default value in ValueType, not default value in user class
+                value = CCClass.getDefault(attrs[propName + DEFAULT]);
+            }
+
+            if (typeof value !== 'object') {
+                instance[propName] = value;
+            }
+            else if (value) {
+                if (CC_EDITOR || CC_TEST) {
+                    this._deserializeObjField(instance, value, propName, this._target && instance);
                 }
                 else {
-                    instance[propName] = null;
+                    this._deserializeObjField(instance, value, propName);
                 }
+            }
+            else {
+                instance[propName] = null;
             }
         }
     };
@@ -497,7 +517,7 @@ var _Deserializer = (function () {
             }
 
             sources.push('prop=d' + accessorToGet + ';');
-            sources.push(`if(typeof ${CC_JSB ? '(prop)' : 'prop'}!=="undefined"){`);
+            sources.push(`if(typeof ${CC_JSB || CC_RUNTIME ? '(prop)' : 'prop'}!=="undefined"){`);
 
             var stillUseUrl = attrs[propName + SAVE_URL_AS_ASSET];
             // function undefined object(null) string boolean number
@@ -506,10 +526,7 @@ var _Deserializer = (function () {
                 var isPrimitiveType;
                 var userType = attrs[propName + TYPE];
                 if (defaultValue === undefined && userType) {
-                    isPrimitiveType = userType === cc.String ||
-                                      userType === cc.Integer ||
-                                      userType === cc.Float ||
-                                      userType === cc.Boolean;
+                    isPrimitiveType = userType instanceof Attr.PrimitiveType;
                 }
                 else {
                     var defaultType = typeof defaultValue;
@@ -526,7 +543,7 @@ var _Deserializer = (function () {
                 }
             }
             else {
-                sources.push(`if(typeof ${CC_JSB ? '(prop)' : 'prop'}!=="object"){` +
+                sources.push(`if(typeof ${CC_JSB || CC_RUNTIME ? '(prop)' : 'prop'}!=="object"){` +
                                  'o' + accessorToSet + '=prop;' +
                              '}else{');
                 compileObjectTypeJit(sources, defaultValue, accessorToSet, propNameLiteralToSet, false, stillUseUrl);
@@ -587,10 +604,7 @@ var _Deserializer = (function () {
                 if (fastMode) {
                     var userType = attrs[propName + TYPE];
                     if (defaultValue === undefined && userType) {
-                        isPrimitiveType = userType === cc.String ||
-                                          userType === cc.Integer ||
-                                          userType === cc.Float ||
-                                          userType === cc.Boolean;
+                        isPrimitiveType = userType instanceof Attr.PrimitiveType;
                     }
                     else {
                         var defaultType = typeof defaultValue;

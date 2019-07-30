@@ -25,8 +25,9 @@
  ****************************************************************************/
 
 const RenderComponent = require('../components/CCRenderComponent');
-const SpriteMaterial = require('../renderer/render-engine').SpriteMaterial;
+const Material = require('../assets/material/CCMaterial');
 const textureUtil = require('../utils/texture-util');
+const BlendFunc = require('../../core/utils/blend-func');
 
 /**
  * !#en
@@ -50,6 +51,7 @@ var MotionStreak = cc.Class({
     //   2.Need to update the position in each frame by itself because we don't know
     //     whether the global position have changed
     extends: RenderComponent,
+    mixins: [BlendFunc],
 
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.others/MotionStreak',
@@ -240,18 +242,23 @@ var MotionStreak = cc.Class({
     },
 
     _activateMaterial () {
-        let material = this._material;
+        if (!this._texture || !this._texture.loaded) {
+            this.disableRender();
+            return;
+        }
+
+        let material = this.sharedMaterials[0];
         if (!material) {
-            material = this._material = new SpriteMaterial();
-            material.useColor = false;
+            material = Material.getInstantiatedBuiltinMaterial('2d-sprite', this);
         }
-        
-        if (this._texture && this._texture.loaded) {
-            material.texture = this._texture;
-            this._updateMaterial(material);
-            this.markForRender(true);
-            this.markForUpdateRenderData(true);
+        else {
+            material = Material.getInstantiatedMaterial(material, this);
         }
+
+        material.setProperty('texture', this._texture);
+
+        this.setMaterial(0, material);
+        this.markForRender(true);
     },
 
     onFocusInEditor: CC_EDITOR && function () {
@@ -276,15 +283,14 @@ var MotionStreak = cc.Class({
      */
     reset () {
         this._points.length = 0;
-        let renderData = this._renderData;
-        if (renderData) {
-            renderData.dataLength = 0;
-            renderData.vertexCount = 0;
-            renderData.indiceCount = 0;
-        }
+        this._assembler._renderData.clear();
         if (CC_EDITOR) {
             cc.engine.repaintInEditMode();
         }
+    },
+
+    update (dt) {
+        this._assembler.update(this, dt);
     }
 });
 

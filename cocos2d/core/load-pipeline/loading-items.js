@@ -142,7 +142,7 @@ function checkCircleReference(owner, item, recursiveCall) {
  * !#zh
  * LoadingItems 是一个加载对象队列，可以用来输送加载对象到加载管线中。<br/>
  * 请不要直接使用 new 构造这个类的对象，你可以使用 {{#crossLink "LoadingItems.create"}}cc.LoadingItems.create{{/crossLink}} 来创建一个新的加载队列，这样可以允许我们的内部对象池回收并重利用加载队列。
- * 它有一个 map 属性用来存放加载项，在 map 对象中已 url 为 key 值。<br/>
+ * 它有一个 map 属性用来存放加载项，在 map 对象中以 url 为 key 值。<br/>
  * 每个对象都会包含下列属性：<br/>
  * - id：该对象的标识，通常与 url 相同。<br/>
  * - url：路径 <br/>
@@ -167,7 +167,7 @@ var LoadingItems = function (pipeline, urlList, onProgress, onComplete) {
 
     this._pipeline = pipeline;
 
-    this._errorUrls = [];
+    this._errorUrls = js.createMap(true);
 
     this._appending = false;
 
@@ -523,7 +523,8 @@ proto._childOnProgress = function (item) {
  * @method allComplete
  */
 proto.allComplete = function () {
-    var errors = this._errorUrls.length === 0 ? null : this._errorUrls;
+    var errors = js.isEmptyObject(this._errorUrls) ? null : this._errorUrls;
+
     if (this.onComplete) {
         this.onComplete(errors, this);
     }
@@ -613,7 +614,7 @@ proto.getError = function (id) {
  * @param {Object} target - can be null
  * @return {Boolean} whether the key is new
  */
-proto.addListener = CallbacksInvoker.prototype.add;
+proto.addListener = CallbacksInvoker.prototype.on;
 
 /**
  * !#en
@@ -628,7 +629,7 @@ proto.addListener = CallbacksInvoker.prototype.add;
  * @param {Object} [target]
  * @return {Boolean}
  */
-proto.hasListener = CallbacksInvoker.prototype.has;
+proto.hasListener = CallbacksInvoker.prototype.hasEventListener;
 
 /**
  * !#en
@@ -643,7 +644,7 @@ proto.hasListener = CallbacksInvoker.prototype.has;
  * @param {Object} target
  * @return {Boolean} removed
  */
-proto.removeListener = CallbacksInvoker.prototype.remove;
+proto.removeListener = CallbacksInvoker.prototype.off;
 
 /**
  * !#en
@@ -690,12 +691,16 @@ proto.itemComplete = function (id) {
     }
 
     // Register or unregister errors
-    var errorListId = this._errorUrls.indexOf(id);
-    if (item.error && errorListId === -1) {
-        this._errorUrls.push(id);
+    
+    var errorListId = id in this._errorUrls;
+    if (item.error instanceof Error || js.isString(item.error)) {
+        this._errorUrls[id] = item.error;
     }
-    else if (!item.error && errorListId !== -1) {
-        this._errorUrls.splice(errorListId, 1);
+    else if (item.error) {
+        js.mixin(this._errorUrls, item.error);
+    }
+    else if (!item.error && errorListId) {
+        delete this._errorUrls[id] 
     }
 
     this.completed[id] = item;
@@ -707,7 +712,7 @@ proto.itemComplete = function (id) {
         this.onProgress(dep ? dep.completed.length : this.completedCount, dep ? dep.deps.length : this.totalCount, item);
     }
 
-    this.invoke(id, item);
+    this.emit(id, item);
     this.removeAll(id);
 
     // All completed
@@ -727,7 +732,7 @@ proto.destroy = function () {
     this._appending = false;
     this._pipeline = null;
     this._ownerQueue = null;
-    this._errorUrls.length = 0;
+    js.clear(this._errorUrls);
     this.onProgress = null;
     this.onComplete = null;
 

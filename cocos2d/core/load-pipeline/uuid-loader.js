@@ -134,6 +134,9 @@ function loadDepends (pipeline, item, asset, depends, callback) {
                 if (this._stillUseUrl) {
                     value = (value && cc.RawAsset.wasRawAssetType(value.constructor)) ? value.nativeUrl : item.rawUrl;
                 }
+                if (this._ownerProp === '_nativeAsset') {
+                    this._owner.url = item.url;
+                }
                 this._owner[this._ownerProp] = value;
                 if (item.uuid !== asset._uuid && dependKeys.indexOf(item.id) < 0) {
                     dependKeys.push(item.id);
@@ -150,7 +153,7 @@ function loadDepends (pipeline, item, asset, depends, callback) {
                         missingAssetReporter.stashByOwner(dependObj, dependProp, Editor.serialize.asAsset(dependSrc));
                     }
                     else {
-                        cc._throw(item.error);
+                        cc._throw(item.error.message || item.error.errorMessage || item.error);
                     }
                 }
                 else {
@@ -177,6 +180,7 @@ function loadDepends (pipeline, item, asset, depends, callback) {
             callback(null, asset);
         }
         else {
+            if (!errors && asset.onLoad) asset.onLoad();
             callback(errors, asset);
         }
     });
@@ -269,11 +273,12 @@ function loadUuid (item, callback) {
     }
     catch (e) {
         cc.deserialize.Details.pool.put(tdInfo);
-        var err = CC_JSB ? (e + '\n' + e.stack) : e.stack;
+        var err = CC_JSB || CC_RUNTIME ? (e + '\n' + e.stack) : e.stack;
         return new Error(debug.getError(4925, item.id, err));
     }
 
     asset._uuid = item.uuid;
+    asset.url = asset.nativeUrl;
 
     if (CC_EDITOR && isScene && MissingClass.hasMissingClass) {
         MissingClass.reportMissingClass(asset);
@@ -285,6 +290,7 @@ function loadUuid (item, callback) {
     cc.deserialize.Details.pool.put(tdInfo);
 
     if (depends.length === 0) {
+        if (asset.onLoad) asset.onLoad();
         return callback(null, asset);
     }
     loadDepends(this.pipeline, item, asset, depends, callback);

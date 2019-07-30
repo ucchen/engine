@@ -23,27 +23,64 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-const Label = require('../../../../components/CCLabel');
-const ttfAssembler = require('./ttf');
-const bmfontAssembler = require('./bmfont');
+import Assembler from '../../../assembler';
+import Label from '../../../../components/CCLabel';
 
-var labelAssembler = {
-    getAssembler (comp) {
-        let assembler = ttfAssembler;
-        
-        if (comp.font instanceof cc.BitmapFont) {
-            assembler = bmfontAssembler;
+import TTF from './2d/ttf';
+import Bmfont from './2d/bmfont';
+import Letter from './2d/letter';
+
+import TTF3D from './3d/ttf';
+import Bmfont3D from './3d/bmfont';
+import Letter3D from './3d/letter';
+
+Label._canvasPool = {
+    pool: [],
+    get () {
+        let data = this.pool.pop();
+
+        if (!data) {
+            let canvas = document.createElement("canvas");
+            let context = canvas.getContext("2d");
+            data = {
+                canvas: canvas,
+                context: context
+            }
         }
 
-        return assembler;
+        return data;
     },
-
-    // Skip invalid labels (without own _assembler)
-    updateRenderData (label) {
-        return label.__allocedDatas;
+    put (canvas) {
+        if (this.pool.length >= 32) {
+            return;
+        }
+        this.pool.push(canvas);
     }
 };
 
-Label._assembler = labelAssembler;
+Assembler.register(cc.Label, {
+    getConstructor(label) {
+        let is3DNode = label.node.is3DNode;
+        let ctor = is3DNode ? TTF3D : TTF;
+        
+        if (label.font instanceof cc.BitmapFont) {
+            ctor = is3DNode ? Bmfont3D : Bmfont;
+        } else if (label.cacheMode === Label.CacheMode.CHAR) {
+            if (cc.sys.browserType === cc.sys.BROWSER_TYPE_WECHAT_GAME_SUB) {
+                cc.warn('sorry, subdomain does not support CHAR mode currently!');
+            } else {
+                ctor = is3DNode ? Letter3D : Letter;
+            }  
+        }
 
-module.exports = labelAssembler;
+        return ctor;
+    },
+
+    TTF,
+    Bmfont,
+    Letter,
+
+    TTF3D,
+    Bmfont3D,
+    Letter3D
+});

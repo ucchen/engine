@@ -25,16 +25,17 @@
  ****************************************************************************/
 
 const EventTarget = require('../event/event-target');
-const renderEngine = require('../renderer/render-engine');
 const renderer = require('../renderer');
 require('../platform/CCClass');
-const gfx = renderEngine.gfx;
+
+import gfx from '../../renderer/gfx';
 
 const GL_NEAREST = 9728;                // gl.NEAREST
 const GL_LINEAR = 9729;                 // gl.LINEAR
 const GL_REPEAT = 10497;                // gl.REPEAT
 const GL_CLAMP_TO_EDGE = 33071;         // gl.CLAMP_TO_EDGE
 const GL_MIRRORED_REPEAT = 33648;       // gl.MIRRORED_REPEAT
+const GL_RGBA = 6408;                   // gl.RGBA
 
 const CHAR_CODE_0 = 48;    // '0'
 const CHAR_CODE_1 = 49;    // '1'
@@ -53,6 +54,9 @@ var idGenerater = new (require('../platform/id-generater'))('Tex');
  * @uses EventTarget
  * @extends Asset
  */
+
+// define a specified number for the pixel format which gfx do not have a standard definition.
+let CUSTOM_PIXEL_FORMAT = 1024;
 
 /**
  * The texture pixel format, default value is RGBA8888, 
@@ -140,6 +144,15 @@ const PixelFormat = cc.Enum({
      */
     RGBA_PVRTC_2BPPV1: gfx.TEXTURE_FMT_RGBA_PVRTC_2BPPV1,
     /**
+     * rgb separate a 2 bpp pvrtc
+     * RGB_A_PVRTC_2BPPV1 texture is a 2x height RGB_PVRTC_2BPPV1 format texture.
+     * It separate the origin alpha channel to the bottom half atlas, the origin rgb channel to the top half atlas
+     * @property RGB_A_PVRTC_2BPPV1
+     * @readonly
+     * @type {Number}
+     */
+    RGB_A_PVRTC_2BPPV1: CUSTOM_PIXEL_FORMAT++,
+    /**
      * rgb 4 bpp pvrtc
      * @property RGB_PVRTC_4BPPV1
      * @readonly
@@ -153,6 +166,44 @@ const PixelFormat = cc.Enum({
      * @type {Number}
      */
     RGBA_PVRTC_4BPPV1: gfx.TEXTURE_FMT_RGBA_PVRTC_4BPPV1,
+    /**
+     * rgb a 4 bpp pvrtc
+     * RGB_A_PVRTC_4BPPV1 texture is a 2x height RGB_PVRTC_4BPPV1 format texture.
+     * It separate the origin alpha channel to the bottom half atlas, the origin rgb channel to the top half atlas
+     * @property RGB_A_PVRTC_4BPPV1
+     * @readonly
+     * @type {Number}
+     */
+    RGB_A_PVRTC_4BPPV1: CUSTOM_PIXEL_FORMAT++,
+    /**
+     * rgb etc1
+     * @property RGB_ETC1
+     * @readonly
+     * @type {Number}
+     */
+    RGB_ETC1: gfx.TEXTURE_FMT_RGB_ETC1,
+    /**
+     * rgba etc1
+     * @property RGBA_ETC1
+     * @readonly
+     * @type {Number}
+     */
+    RGBA_ETC1: CUSTOM_PIXEL_FORMAT++,
+
+    /**
+     * rgb etc2
+     * @property RGB_ETC2
+     * @readonly
+     * @type {Number}
+     */
+    RGB_ETC2: gfx.TEXTURE_FMT_RGB_ETC2,
+    /**
+     * rgba etc2
+     * @property RGBA_ETC2
+     * @readonly
+     * @type {Number}
+     */
+    RGBA_ETC2: gfx.TEXTURE_FMT_RGBA_ETC2,
 });
 
 /**
@@ -268,8 +319,9 @@ var Texture2D = cc.Class({
         _flipY: false,
         _minFilter: Filter.LINEAR,
         _magFilter: Filter.LINEAR,
+        _mipFilter: Filter.LINEAR,
         _wrapS: WrapMode.CLAMP_TO_EDGE,
-        _wrapT: WrapMode.CLAMP_TO_EDGE
+        _wrapT: WrapMode.CLAMP_TO_EDGE,
     },
 
     statics: {
@@ -279,28 +331,12 @@ var Texture2D = cc.Class({
         _FilterIndex: FilterIndex,
 
         // predefined most common extnames
-        extnames: ['.png', '.jpg', '.jpeg', '.bmp', '.webp', '.pvr', '.etc'],
-
-        _isCompressed (texture) {
-            return texture._format >= PixelFormat.RGB_PVRTC_2BPPV1 && texture._format <= PixelFormat.RGBA_PVRTC_4BPPV1;
-        }
+        extnames: ['.png', '.jpg', '.jpeg', '.bmp', '.webp', '.pvr', '.pkm'],
     },
 
     ctor () {
         // Id for generate hash in material
         this._id = idGenerater.getNewId();
-        
-        /**
-         * !#en
-         * The url of the texture, this could be empty if the texture wasn't created via a file.
-         * !#zh
-         * 贴图文件的 url，当贴图不是由文件创建时值可能为空
-         * @property url
-         * @type {String}
-         * @readonly
-         */
-        // TODO - use nativeUrl directly
-        this.url = "";
 
         /**
          * !#en
@@ -330,6 +366,8 @@ var Texture2D = cc.Class({
          */
         this.height = 0;
 
+        this._hashDirty = true;
+        this._hash = 0;
         this._texture = null;
         
         if (CC_EDITOR) {
@@ -340,7 +378,7 @@ var Texture2D = cc.Class({
     /**
      * !#en
      * Get renderer texture implementation object
-     * extended from renderEngine.TextureAsset
+     * extended from render.Texture2D
      * !#zh  返回渲染器内部贴图对象
      * @method getImpl
      */
@@ -387,6 +425,10 @@ var Texture2D = cc.Class({
                 this._magFilter = options.magFilter;
                 options.magFilter = FilterIndex[options.magFilter];
             }
+            if (options.mipFilter !== undefined) {
+                this._mipFilter = options.mipFilter;
+                options.mipFilter = FilterIndex[options.mipFilter];
+            }
             if (options.wrapS !== undefined) {
                 this._wrapS = options.wrapS;
             }
@@ -427,6 +469,8 @@ var Texture2D = cc.Class({
             if (options.images && options.images.length > 0) {
                 this._texture.update(options);
             }
+
+            this._hashDirty = true;
         }
     },
 
@@ -445,7 +489,7 @@ var Texture2D = cc.Class({
         if (!element)
             return;
         this._image = element;
-        if (CC_WECHATGAME || CC_QQPLAY || element.complete || element instanceof HTMLCanvasElement) {
+        if (element.complete || element instanceof HTMLCanvasElement) {
             this.handleLoadedTexture();
         }
         else {
@@ -482,7 +526,7 @@ var Texture2D = cc.Class({
         opts.magFilter = FilterIndex[this._magFilter];
         opts.wrapS = this._wrapS;
         opts.wrapT = this._wrapT;
-        opts.format = pixelFormat;
+        opts.format = this._getGFXPixelFormat(pixelFormat);
         opts.width = pixelsWidth;
         opts.height = pixelsHeight;
         if (!this._texture) {
@@ -583,7 +627,7 @@ var Texture2D = cc.Class({
         opts.width = this.width;
         opts.height = this.height;
         opts.hasMipmap = this._hasMipmap;
-        opts.format = this._format;
+        opts.format = this._getGFXPixelFormat(this._format);
         opts.premultiplyAlpha = this._premultiplyAlpha;
         opts.flipY = this._flipY;
         opts.minFilter = FilterIndex[this._minFilter];
@@ -603,11 +647,7 @@ var Texture2D = cc.Class({
         this.emit("load");
 
         if (cc.macro.CLEANUP_IMAGE_CACHE && this._image instanceof HTMLImageElement) {
-            // wechat game platform will cache image parsed data, 
-            // so image will consume much more memory than web, releasing it
-            this._image.src = "";
-            // Release image in loader cache
-            cc.loader.removeItem(this._image.id);
+            this._clearImage();
         }
     },
 
@@ -708,8 +748,48 @@ var Texture2D = cc.Class({
     setMipmap (mipmap) {
         if (this._hasMipmap !== mipmap) {
             var opts = _getSharedOptions();
-            opts.hasMipmap = mipmap;
+            opts.mipmap = mipmap;
             this.update(opts);
+        }
+    },
+
+    _getOpts() {
+        let opts = _getSharedOptions();
+        opts.width = this.width;
+        opts.height = this.height;
+        opts.mipmap = this._genMipmap;
+        opts.format = this._format;
+        opts.premultiplyAlpha = this._premultiplyAlpha;
+        opts.anisotropy = this._anisotropy;
+        opts.flipY = this._flipY;
+        opts.minFilter = FilterIndex[this._minFilter];
+        opts.magFilter = FilterIndex[this._magFilter];
+        opts.mipFilter = FilterIndex[this._mipFilter];
+        opts.wrapS = this._wrapS;
+        opts.wrapT = this._wrapT;
+        return opts;
+    },
+
+    _getGFXPixelFormat (format) {
+        if (format === PixelFormat.RGBA_ETC1) {
+            format = PixelFormat.RGB_ETC1;
+        }
+        else if (format === PixelFormat.RGB_A_PVRTC_4BPPV1) {
+            format = PixelFormat.RGB_PVRTC_4BPPV1;
+        }
+        else if (format === PixelFormat.RGB_A_PVRTC_2BPPV1) {
+            format = PixelFormat.RGB_PVRTC_2BPPV1;
+        }
+        return format;
+    },
+
+    _resetUnderlyingMipmaps(mipmapSources) {
+        const opts = this._getOpts();
+        opts.images = mipmapSources || [null];
+        if (!this._texture) {
+            this._texture = new renderer.Texture2D(renderer.device, opts);
+        } else {
+            this._texture.update(opts);
         }
     },
 
@@ -725,7 +805,7 @@ var Texture2D = cc.Class({
             let exts = [];
             for (let i = 0; i < exportedExts.length; i++) {
                 let extId = "";
-                let ext = exportedExts[i]
+                let ext = exportedExts[i];
                 if (ext) {
                     // ext@format
                     let extFormat = ext.split('@');
@@ -749,42 +829,56 @@ var Texture2D = cc.Class({
     },
 
     _deserialize: function (data, handle) {
+        let device = cc.renderer.device;
+
         let fields = data.split(',');
         // decode extname
-        var extIdStr = fields[0];
+        let extIdStr = fields[0];
         if (extIdStr) {
             let extIds = extIdStr.split('_');
 
-            let extId = 999;
-            let ext = '';
-            let format = this._format;
+            let defaultExt = '';
+            let bestExt = '';
+            let bestIndex = 999;
+            let bestFormat = this._format;
             let SupportTextureFormats = cc.macro.SUPPORT_TEXTURE_FORMATS;
             for (let i = 0; i < extIds.length; i++) {
                 let extFormat = extIds[i].split('@');
                 let tmpExt = extFormat[0];
-                tmpExt = tmpExt.charCodeAt(0) - CHAR_CODE_0;
-                tmpExt = Texture2D.extnames[tmpExt] || extFormat;
+                tmpExt = Texture2D.extnames[tmpExt.charCodeAt(0) - CHAR_CODE_0] || tmpExt;
 
                 let index = SupportTextureFormats.indexOf(tmpExt);
-                if (index !== -1 && index < extId) {
-                    extId = index;
-                    ext = tmpExt;
-                    format = extFormat[1] ? parseInt(extFormat[1]) : this._format;
+                if (index !== -1 && index < bestIndex) {
+                    
+                    let tmpFormat = extFormat[1] ? parseInt(extFormat[1]) : this._format;
+
+                    // check whether or not support compressed texture
+                    if ( tmpExt === '.pvr' && !device.ext('WEBGL_compressed_texture_pvrtc')) {
+                        continue;
+                    }
+                    else if ((tmpFormat === PixelFormat.RGB_ETC1 || tmpFormat === PixelFormat.RGBA_ETC1) && !device.ext('WEBGL_compressed_texture_etc1')) {
+                        continue;
+                    }
+                    else if ((tmpFormat === PixelFormat.RGB_ETC2 || tmpFormat === PixelFormat.RGBA_ETC2) && !device.ext('WEBGL_compressed_texture_etc')) {
+                        continue;
+                    }
+
+                    bestIndex = index;
+                    bestExt = tmpExt;
+                    bestFormat = tmpFormat;
+                }
+                else if (!defaultExt) {
+                    defaultExt = tmpExt;
                 }
             }
 
-            if (ext) {
-                this._setRawAsset(ext);
-                this._format = format;
+            if (bestExt) {
+                this._setRawAsset(bestExt);
+                this._format = bestFormat;
             }
-
-            // preset uuid to get correct nativeUrl
-            let loadingItem = handle.customEnv;
-            let uuid = loadingItem && loadingItem.uuid;
-            if (uuid) {
-                this._uuid = uuid;
-                var url = this.nativeUrl;
-                this.url = url;
+            else {
+                this._setRawAsset(defaultExt);
+                cc.warnID(3120, handle.customEnv.url, defaultExt, defaultExt);
             }
         }
         if (fields.length === 6) {
@@ -797,6 +891,43 @@ var Texture2D = cc.Class({
             // decode premultiply alpha
             this._premultiplyAlpha = fields[5].charCodeAt(0) === CHAR_CODE_1;
         }
+    },
+
+    _getHash () {
+        if (!this._hashDirty) {
+            return this._hash;
+        }
+        let hasMipmap = this._hasMipmap ? 1 : 0;
+        let premultiplyAlpha = this._premultiplyAlpha ? 1 : 0;
+        let flipY = this._flipY ? 1 : 0;
+        let minFilter = this._minFilter === Filter.LINEAR ? 1 : 2;
+        let magFilter = this._magFilter === Filter.LINEAR ? 1 : 2;
+        let wrapS = this._wrapS === WrapMode.REPEAT ? 1 : (this._wrapS === WrapMode.CLAMP_TO_EDGE ? 2 : 3);
+        let wrapT = this._wrapT === WrapMode.REPEAT ? 1 : (this._wrapT === WrapMode.CLAMP_TO_EDGE ? 2 : 3);
+        let pixelFormat = this._format;
+        let image = this._image;
+        if (CC_JSB && image) {
+            if (image._glFormat !== GL_RGBA)
+                pixelFormat = 0;
+            premultiplyAlpha = image._premultiplyAlpha;
+        }
+
+        this._hash = Number(`${minFilter}${magFilter}${pixelFormat}${wrapS}${wrapT}${hasMipmap}${premultiplyAlpha}${flipY}`);
+        this._hashDirty = false;
+        return this._hash;
+    },
+
+    _isCompressed () {
+        return this._texture && this._texture._compressed;
+    },
+    
+    _clearImage () {
+        // wechat game platform will cache image parsed data, 
+        // so image will consume much more memory than web, releasing it
+        // Release image in loader cache
+        // native image element has not image.id, release by image.src.
+        cc.loader.removeItem(this._image.id || this._image.src);
+        this._image.src = "";
     }
 });
 

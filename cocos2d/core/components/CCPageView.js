@@ -100,6 +100,7 @@ var PageView = cc.Class({
         this._curPageIdx = 0;
         this._lastPageIdx = 0;
         this._pages = [];
+        this._initContentPos = cc.v2();
         this._scrollCenterOffsetX = []; // 每一个页面居中时需要的偏移量（X）
         this._scrollCenterOffsetY = []; // 每一个页面居中时需要的偏移量（Y）
     },
@@ -394,20 +395,15 @@ var PageView = cc.Class({
         if (!this.content) { return; }
         var layout = this.content.getComponent(cc.Layout);
         if (layout) {
-            if (this._pages.length === 0) {
-                layout.padding = 0;
-            }
-            else {
+            if (this.sizeMode === SizeMode.Free && this._pages.length > 0) {
                 var lastPage = this._pages[this._pages.length - 1];
-                if (this.sizeMode === SizeMode.Free) {
-                    if (this.direction === Direction.Horizontal) {
-                        layout.paddingLeft = (this.node.width - this._pages[0].width) / 2;
-                        layout.paddingRight = (this.node.width - lastPage.width) / 2;
-                    }
-                    else if (this.direction === Direction.Vertical) {
-                        layout.paddingTop = (this.node.height - this._pages[0].height) / 2;
-                        layout.paddingBottom = (this.node.height - lastPage.height) / 2;
-                    }
+                if (this.direction === Direction.Horizontal) {
+                    layout.paddingLeft = (this._view.width - this._pages[0].width) / 2;
+                    layout.paddingRight = (this._view.width - lastPage.width) / 2;
+                }
+                else if (this.direction === Direction.Vertical) {
+                    layout.paddingTop = (this._view.height - this._pages[0].height) / 2;
+                    layout.paddingBottom = (this._view.height - lastPage.height) / 2;
                 }
             }
             layout.updateLayout();
@@ -416,6 +412,12 @@ var PageView = cc.Class({
 
     // 刷新页面视图
     _updatePageView: function () {
+        // 当页面数组变化时修改 content 大小
+        var layout = this.content.getComponent(cc.Layout);
+        if (layout && layout.enabled) {
+            layout.updateLayout();
+        }
+
         var pageCount = this._pages.length;
 
         if (this._curPageIdx >= pageCount) {
@@ -423,22 +425,18 @@ var PageView = cc.Class({
             this._lastPageIdx = this._curPageIdx;
         }
         // 进行排序
+        var contentPos = this._initContentPos;
         for (var i = 0; i < pageCount; ++i) {
-            this._pages[i].setSiblingIndex(i);
+            var page = this._pages[i];
+            page.setSiblingIndex(i);
             if (this.direction === Direction.Horizontal) {
-                this._scrollCenterOffsetX[i] = Math.abs(this.content.x + this._pages[i].x);
+                this._scrollCenterOffsetX[i] = Math.abs(contentPos.x + page.x);
             }
             else {
-                this._scrollCenterOffsetY[i] = Math.abs(this.content.y + this._pages[i].y);
+                this._scrollCenterOffsetY[i] = Math.abs(contentPos.y + page.y);
             }
         }
 
-        // 当页面数组变化时修改 content 大小
-        var layout = this.content.getComponent(cc.Layout);
-        if (layout && layout.enabled) {
-            layout.updateLayout();
-        }
-        
         // 刷新 indicator 信息与状态
         if (this.indicator) {
             this.indicator._refresh();
@@ -451,7 +449,7 @@ var PageView = cc.Class({
             return;
         }
         var locPages = CC_EDITOR ? this.content.children : this._pages;
-        var selfSize = this.node.getContentSize();
+        var selfSize = this._view.getContentSize();
         for (var i = 0, len = locPages.length; i < len; i++) {
             locPages[i].setContentSize(selfSize);
         }
@@ -460,6 +458,7 @@ var PageView = cc.Class({
     // 初始化页面
     _initPages: function () {
         if (!this.content) { return; }
+        this._initContentPos = this.content.position;
         var children = this.content.children;
         for (var i = 0; i < children.length; ++i) {
             var page = children[i];
@@ -495,10 +494,10 @@ var PageView = cc.Class({
         }
         else {
             if (this.direction === Direction.Horizontal) {
-                return Math.abs(offset.x) >= this.node.width * this.scrollThreshold;
+                return Math.abs(offset.x) >= this._view.width * this.scrollThreshold;
             }
             else if (this.direction === Direction.Vertical) {
-                return Math.abs(offset.y) >= this.node.height * this.scrollThreshold;
+                return Math.abs(offset.y) >= this._view.height * this.scrollThreshold;
             }
         }
     },
@@ -531,10 +530,10 @@ var PageView = cc.Class({
         }
         else {
             if (this.direction === Direction.Horizontal) {
-                offset.x = idx * this.node.width;
+                offset.x = idx * this._view.width;
             }
             else if (this.direction === Direction.Vertical) {
-                offset.y = idx * this.node.height;
+                offset.y = idx * this._view.height;
             }
         }
         return offset;

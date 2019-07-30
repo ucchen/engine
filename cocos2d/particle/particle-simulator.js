@@ -60,7 +60,7 @@ let Particle = function () {
 let pool = new js.Pool(function (par) {
     par.pos.set(ZERO_VEC2);
     par.startPos.set(ZERO_VEC2);
-    par.color._val = ((255<<24) >>> 0);
+    par.color._val = 0xFF000000;
     par.deltaColor.r = par.deltaColor.g = par.deltaColor.b = 0;
     par.deltaColor.a = 255;
     par.size = 0;
@@ -162,7 +162,9 @@ Simulator.prototype.emitParticle = function (pos) {
     particle.startPos.y = pos.y;
 
     // direction
-    let a = misc.degreesToRadians(psys.angle + psys.angleVar * (Math.random() - 0.5) * 2); 
+    let worldRotation = getWorldRotation(psys.node);
+    let relAngle = psys.positionType === cc.ParticleSystem.PositionType.FREE ? psys.angle + worldRotation : psys.angle;
+    let a = misc.degreesToRadians(relAngle + psys.angleVar * (Math.random() - 0.5) * 2);
     // Mode Gravity: A
     if (psys.emitterMode === cc.ParticleSystem.EmitterMode.GRAVITY) {
         let s = psys.speed + psys.speedVar * (Math.random() - 0.5) * 2;
@@ -190,13 +192,25 @@ Simulator.prototype.emitParticle = function (pos) {
         particle.degreesPerSecond = misc.degreesToRadians(psys.rotatePerS + psys.rotatePerSVar * (Math.random() - 0.5) * 2);
     }
 };
+// In the Free mode to get emit real rotation in the world coordinate.
+function getWorldRotation (node) {
+    let rotation = 0;
+    let tempNode = node;
+    while (tempNode) {
+        rotation += tempNode.angle;
+        tempNode = tempNode.parent;
+    }
+    return rotation;
+}
 
 Simulator.prototype.updateUVs = function (force) {
     let particleCount = this.particles.length;
-    if (this.sys._buffer && this.sys._spriteFrame) {
-        const FLOAT_PER_PARTICLE = 4 * this.sys._vertexFormat._bytes / 4;
-        let vbuf = this.sys._buffer._vData;
-        let uv = this.sys._spriteFrame.uv;
+    let assembler = this.sys._assembler;
+    let buffer = assembler.getBuffer();
+    if (buffer && this.sys._renderSpriteFrame) {
+        const FLOAT_PER_PARTICLE = 4 * assembler._vfmt._bytes / 4;
+        let vbuf = buffer._vData;
+        let uv = this.sys._renderSpriteFrame.uv;
 
         let start = force ? 0 : this._uvFilled;
         for (let i = start; i < particleCount; i++) {
@@ -264,16 +278,23 @@ Simulator.prototype.step = function (dt) {
     let psys = this.sys;
     let node = psys.node;
     let particles = this.particles;
-    const FLOAT_PER_PARTICLE = 4 * psys._vertexFormat._bytes / 4;
+    const FLOAT_PER_PARTICLE = 4 * this.sys._assembler._vfmt._bytes / 4;
 
     // Calculate pos
     node._updateWorldMatrix();
-    AffineTrans.fromMat4(_trans, node._worldMatrix);
+    _trans = AffineTrans.identity();
     if (psys.positionType === cc.ParticleSystem.PositionType.FREE) {
+        let m =  node._worldMatrix.m;
+        _trans.tx = m[12];
+        _trans.ty = m[13];
         AffineTrans.transformVec2(_pos, ZERO_VEC2, _trans);
     } else if (psys.positionType === cc.ParticleSystem.PositionType.RELATIVE) {
-        _pos.x = node._position.x;
-        _pos.y = node._position.y;
+        let angle = misc.degreesToRadians(-node.angle);
+        let cos = Math.cos(angle);
+        let sin = Math.sin(angle);
+        _trans = AffineTrans.create(cos, -sin, sin, cos, 0, 0);
+        _pos.x = node.x;
+        _pos.y = node.y;
     }
 
     // Get world to node trans only once
@@ -299,7 +320,7 @@ Simulator.prototype.step = function (dt) {
     }
 
     // Request buffer for particles
-    let buffer = psys._buffer;
+    let buffer = psys._assembler.getBuffer();
     let particleCount = particles.length;
     buffer.reset();
     buffer.request(particleCount * 4, particleCount * 6);
@@ -376,8 +397,14 @@ Simulator.prototype.step = function (dt) {
 
             // update values in quad buffer
             let newPos = _tpa;
-            if (psys.positionType === cc.ParticleSystem.PositionType.FREE || psys.positionType === cc.ParticleSystem.PositionType.RELATIVE) {
-                let diff = _tpb, startPos = _tpc;
+            let diff = _tpb;
+            if (psys.positionType === cc.ParticleSystem.PositionType.FREE) {
+                diff.subSelf(particle.startPos);
+                newPos.set(particle.pos);
+                newPos.subSelf(diff);
+            }
+            else if (psys.positionType === cc.ParticleSystem.PositionType.RELATIVE) {
+                let startPos = _tpc;
                 // current Position convert To Node Space
                 AffineTrans.transformVec2(diff, _pos, worldToNodeTrans);
                 // start Position convert To Node Space
@@ -407,7 +434,7 @@ Simulator.prototype.step = function (dt) {
 
     if (particles.length > 0) {
         buffer.uploadData();
-        psys._ia._count = particles.length * 6;
+        psys._assembler._ia._count = particles.length * 6;
     }
     else if (!this.active) {
         this.finished = true;

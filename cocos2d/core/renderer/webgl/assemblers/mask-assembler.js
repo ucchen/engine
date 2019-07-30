@@ -23,93 +23,173 @@
  THE SOFTWARE.
  ****************************************************************************/
 
-const StencilManager = require('../stencil-manager');
+import Assembler from '../../assembler';
+
 const Mask = require('../../../components/CCMask');
 const RenderFlow = require('../../render-flow');
-const spriteAssembler = require('./sprite/simple');
-const graphicsAssembler = require('./graphics');
+const SimpleSpriteAssembler = require('./sprite/2d/simple');
+const GraphicsAssembler = require('./graphics');
+const gfx = require('../../../../renderer/gfx');
+const vfmtPos = require('../vertex-format').vfmtPos;
 
-let _stencilMgr = StencilManager.sharedManager;
+// todo: 8 is least Stencil depth supported by webGL device, it could be adjusted to vendor implementation value
+let _maxLevel = 8;
+// Current mask
+let _maskStack = [];
 
-let maskFrontAssembler = {
+function getWriteMask () {
+    return 0x01 << (_maskStack.length - 1);
+}
+
+function getStencilRef () {
+    let result = 0;
+    for (let i = 0; i < _maskStack.length; ++i) {
+        result += (0x01 << i);
+    }
+    return result;
+}
+
+function applyStencil (material, func, failOp, ref, stencilMask, writeMask) {
+    let effect = material.effect;
+    let zFailOp = gfx.STENCIL_OP_KEEP,
+        zPassOp = gfx.STENCIL_OP_KEEP;
+    effect.setStencil(gfx.STENCIL_ENABLE, func, ref, stencilMask, failOp, zFailOp, zPassOp, writeMask);
+}
+
+
+function pushMask (mask) {
+    if (_maskStack.length + 1 > _maxLevel) {
+        cc.errorID(9000, _maxLevel);
+    }
+    _maskStack.push(mask);
+}
+
+function exitMask (mask, renderer) {
+    if (_maskStack.length === 0) {
+        cc.errorID(9001);
+    }
+    _maskStack.pop();
+    if (_maskStack.length === 0) {
+        renderer._flushMaterial(mask._exitMaterial);
+    }
+    else {
+        enableMask(renderer);
+    }
+}
+
+function applyClearMask (mask, renderer) {
+    let func = gfx.DS_FUNC_NEVER;
+    let ref = getWriteMask();
+    let stencilMask = ref;
+    let writeMask = ref;
+    let failOp = mask.inverted ? gfx.STENCIL_OP_REPLACE : gfx.STENCIL_OP_ZERO;
+
+    applyStencil(mask._clearMaterial, func, failOp, ref, stencilMask, writeMask);
+
+    let buffer = renderer.getBuffer('mesh', vfmtPos);
+    let offsetInfo = buffer.request(4, 6);
+    let indiceOffset = offsetInfo.indiceOffset,
+        vertexOffset = offsetInfo.byteOffset >> 2,
+        vertexId = offsetInfo.vertexOffset,
+        vbuf = buffer._vData,
+        ibuf = buffer._iData;
+    
+    vbuf[vertexOffset++] = -1;
+    vbuf[vertexOffset++] = -1;
+    vbuf[vertexOffset++] = -1;
+    vbuf[vertexOffset++] = 1;
+    vbuf[vertexOffset++] = 1;
+    vbuf[vertexOffset++] = 1;
+    vbuf[vertexOffset++] = 1;
+    vbuf[vertexOffset++] = -1;
+
+    ibuf[indiceOffset++] = vertexId;
+    ibuf[indiceOffset++] = vertexId + 3;
+    ibuf[indiceOffset++] = vertexId + 1;
+    ibuf[indiceOffset++] = vertexId + 1;
+    ibuf[indiceOffset++] = vertexId + 3;
+    ibuf[indiceOffset++] = vertexId + 2;
+
+    renderer.node = renderer._dummyNode;
+    renderer.material = mask._clearMaterial;
+    renderer._flush();
+}
+
+function applyAreaMask (mask, renderer) {
+    let func = gfx.DS_FUNC_NEVER;
+    let ref = getWriteMask();
+    let stencilMask = ref;
+    let writeMask = ref;
+    let failOp = mask.inverted ? gfx.STENCIL_OP_ZERO : gfx.STENCIL_OP_REPLACE;
+
+    applyStencil(mask.sharedMaterials[0], func, failOp, ref, stencilMask, writeMask);
+
+    // vertex buffer
+    renderer.material = mask.sharedMaterials[0];
+
+    if (mask._type === Mask.Type.IMAGE_STENCIL) {
+        renderer.node = renderer._dummyNode;
+        SimpleSpriteAssembler.prototype.fillBuffers.call(mask._assembler, mask, renderer);
+        renderer._flush();
+    }
+    else {
+        renderer.node = mask.node;
+        GraphicsAssembler.prototype.fillBuffers.call(mask._graphics._assembler, mask._graphics, renderer);
+    }
+}
+
+function enableMask (renderer) {
+    let func = gfx.DS_FUNC_EQUAL;
+    let failOp = gfx.STENCIL_OP_KEEP;
+    let ref = getStencilRef();
+    let stencilMask = ref;
+    let writeMask = getWriteMask();
+    
+    let mask = _maskStack[_maskStack.length - 1];
+    applyStencil(mask._enableMaterial, func, failOp, ref, stencilMask, writeMask);
+    renderer._flushMaterial(mask._enableMaterial);
+}
+
+export class MaskAssembler  extends SimpleSpriteAssembler {
     updateRenderData (mask) {
-        if (!mask._renderData) {
-            // Update clear graphics material
-            graphicsAssembler.updateRenderData(mask._clearGraphics);
-
-            if (mask._type === Mask.Type.IMAGE_STENCIL) {
-                mask._renderData = spriteAssembler.createData(mask);
-            }
-            else {
-                // for updateGraphics calculation
-                mask._renderData = mask.requestRenderData();
-            }
-        }
-        let renderData = mask._renderData;
-
         if (mask._type === Mask.Type.IMAGE_STENCIL) {
             if (mask.spriteFrame) {
-                let size = mask.node._contentSize;
-                let anchor = mask.node._anchorPoint;
-                renderData.updateSizeNPivot(size.width, size.height, anchor.x, anchor.y);
-                renderData.dataLength = 4;
-                spriteAssembler.updateRenderData(mask);
-                renderData.material = mask._material;
+                SimpleSpriteAssembler.prototype.updateRenderData.call(this, mask);
             }
             else {
-                mask._material = null;
+                mask.setMaterial(0, null);
             }
         }
         else {
-            mask._graphics._material = mask._material;
-            graphicsAssembler.updateRenderData(mask._graphics);
+            mask._graphics.setMaterial(0, mask.sharedMaterials[0]);
+            GraphicsAssembler.prototype.updateRenderData.call(mask._graphics._assembler, mask._graphics, mask._graphics);
         }
-    },
+    }
 
     fillBuffers (mask, renderer) {
         // Invalid state
         if (mask._type !== Mask.Type.IMAGE_STENCIL || mask.spriteFrame) {
             // HACK: Must push mask after batch, so we can only put this logic in fillVertexBuffer or fillIndexBuffer
-            _stencilMgr.pushMask(mask);
-            _stencilMgr.clear();
+            pushMask(mask);
 
-            graphicsAssembler.fillBuffers(mask._clearGraphics, renderer);
+            applyClearMask(mask, renderer);
+            applyAreaMask(mask, renderer);
 
-            _stencilMgr.enterLevel();
-
-            // vertex buffer
-            renderer.node = mask.node;
-            renderer.material = mask._material;
-            if (mask._type === Mask.Type.IMAGE_STENCIL) {
-                spriteAssembler.fillBuffers(mask, renderer);
-                renderer._flush();
-            }
-            else {
-                graphicsAssembler.fillBuffers(mask._graphics, renderer);
-            }
-            _stencilMgr.enableMask();
+            enableMask(renderer);
         }
 
         mask.node._renderFlag |= RenderFlow.FLAG_UPDATE_RENDER_DATA;
     }
-};
 
-let maskEndAssembler = {
-    fillBuffers (mask, renderer) {
+    postFillBuffers (mask, renderer) {
         // Invalid state
         if (mask._type !== Mask.Type.IMAGE_STENCIL || mask.spriteFrame) {
             // HACK: Must pop mask after batch, so we can only put this logic in fillBuffers
-            _stencilMgr.exitMask();
+            exitMask(mask, renderer);
         }
 
         mask.node._renderFlag |= RenderFlow.FLAG_UPDATE_RENDER_DATA;
     }
 };
 
-Mask._assembler = maskFrontAssembler;
-Mask._postAssembler = maskEndAssembler;
-
-module.exports = {
-    front: maskFrontAssembler,
-    end: maskEndAssembler
-};
+Assembler.register(Mask, MaskAssembler);

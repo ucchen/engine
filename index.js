@@ -49,6 +49,8 @@ require('./polyfill/string');
 require('./polyfill/misc');
 require('./polyfill/array');
 require('./polyfill/object');
+require('./polyfill/array-buffer');
+require('./polyfill/number');
 if (!(CC_EDITOR && Editor.isMainProcess)) {
     require('./polyfill/typescript');
 }

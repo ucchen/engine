@@ -151,10 +151,9 @@ function genProperty (ctor, properties, propName, options, desc, cache) {
     if (options) {
         fullOptions = CC_DEV ? Preprocess.getFullFormOfProperty(options, propName, js.getClassName(ctor)) :
                                Preprocess.getFullFormOfProperty(options);
-        fullOptions = fullOptions || options;
     }
     var existsProperty = properties[propName];
-    var prop = js.mixin(existsProperty || {}, fullOptions || {});
+    var prop = js.mixin(existsProperty || {}, fullOptions || options || {});
 
     var isGetset = desc && (desc.get || desc.set);
     if (isGetset) {
@@ -214,8 +213,8 @@ function genProperty (ctor, properties, propName, options, desc, cache) {
             }
         }
 
-        if (CC_DEV) {
-            if (options && options.hasOwnProperty('default')) {
+        if ((CC_EDITOR && !Editor.isBuilder) || CC_TEST) {
+            if (!fullOptions && options && options.hasOwnProperty('default')) {
                 cc.warnID(3653, propName, js.getClassName(ctor));
                 // prop.default = options.default;
             }
@@ -228,7 +227,10 @@ function genProperty (ctor, properties, propName, options, desc, cache) {
                 isDefaultValueSpecified &&
                 defaultValue == null
             ) {
-                cc.warnID(3656, js.getClassName(ctor), propName);
+                // Avoid excessive warning when the ts decorator format is wrong
+                if (typeof options !== 'function' || cc.RawAsset.isRawAssetType(options)) {
+                    cc.warnID(3656, js.getClassName(ctor), propName);
+                }
             }
         }
         prop.default = defaultValue;
@@ -587,7 +589,7 @@ var disallowMultiple = (CC_DEV ? createEditorDecorator : createDummyDecorator)(c
  * playOnFocus(): Function
  * playOnFocus(_class: Function): void
  */
-var playOnFocus = (CC_DEV ? createEditorDecorator : createDummyDecorator)(checkCtorArgument, 'playOnFocus');
+var playOnFocus = (CC_DEV ? createEditorDecorator : createDummyDecorator)(checkCtorArgument, 'playOnFocus', true);
 
 /**
  * !#en

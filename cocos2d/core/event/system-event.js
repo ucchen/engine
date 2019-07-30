@@ -67,21 +67,14 @@ var EventType = cc.Enum({
  * !#en
  * The System event, it currently supports keyboard events and accelerometer events.<br>
  * You can get the SystemEvent instance with cc.systemEvent.<br>
- * example:
- * ```
- * cc.systemEvent.on(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
- * cc.systemEvent.off(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
- * ```
  * !#zh
  * 系统事件，它目前支持按键事件和重力感应事件。<br>
  * 你可以通过 cc.systemEvent 获取到 SystemEvent 的实例。<br>
- * 参考示例：
- * ```
- * cc.systemEvent.on(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
- * cc.systemEvent.off(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
- * ```
  * @class SystemEvent
  * @extends EventTarget
+ * @example
+ * cc.systemEvent.on(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
+ * cc.systemEvent.off(cc.SystemEvent.EventType.DEVICEMOTION, this.onDeviceMotionEvent, this);
  */
 
 var keyboardListener = null;
@@ -101,6 +94,9 @@ var SystemEvent = cc.Class({
      * @param {Boolean} isEnable
      */
     setAccelerometerEnabled: function (isEnable) {
+        if (CC_EDITOR) {
+            return;
+        }
         inputManger.setAccelerometerEnabled(isEnable);
     },
 
@@ -111,10 +107,16 @@ var SystemEvent = cc.Class({
      * @param {Number} interval
      */
     setAccelerometerInterval: function(interval) {
+        if (CC_EDITOR) {
+            return;
+        }
         inputManger.setAccelerometerInterval(interval);
     },
 
     on: function (type, callback, target) {
+        if (CC_EDITOR) {
+            return;
+        }
         this._super(type, callback, target);
 
         // Keyboard
@@ -156,6 +158,9 @@ var SystemEvent = cc.Class({
 
 
     off: function (type, callback, target) {
+        if (CC_EDITOR) {
+            return;
+        }
         this._super(type, callback, target);
 
         // Keyboard
@@ -176,8 +181,7 @@ var SystemEvent = cc.Class({
 });
 
 cc.SystemEvent = module.exports = SystemEvent;
-if (!CC_EDITOR) {
-/** 
+/**
  * @module cc
  */
 
@@ -186,6 +190,5 @@ if (!CC_EDITOR) {
  * !#zh 系统事件单例，方便全局使用
  * @property systemEvent
  * @type {SystemEvent}
- */    
-    cc.systemEvent = new cc.SystemEvent();
-}
+ */
+cc.systemEvent = new cc.SystemEvent();

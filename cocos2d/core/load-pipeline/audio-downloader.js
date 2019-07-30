@@ -35,11 +35,6 @@ function loadDomAudio (item, callback) {
     var dom = document.createElement('audio');
     dom.src = item.url;
 
-    if (CC_WECHATGAME) {
-        callback(null, dom);
-        return;
-    }
-
     var clearEvent = function () {
         clearTimeout(timer);
         dom.removeEventListener("canplaythrough", success, false);

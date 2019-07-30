@@ -194,6 +194,12 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
 
         // the location of the sprite on rendering texture
         this._rect = null;
+        // uv data of frame
+        this.uv = [];
+        // texture of frame
+        this._texture = null;
+        // store original info before packed to dynamic atlas
+        this._original = null;
 
         // for trimming
         this._offset = null;
@@ -207,14 +213,9 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
 
         this._capInsets = [0, 0, 0, 0];
 
-        this.uv = [];
         this.uvSliced = [];
 
-        this._texture = null;
         this._textureFilename = '';
-
-        // store original info before packed to dynamic atlas
-        this._original = null;
 
         if (CC_EDITOR) {
             // Atlas asset uuid
@@ -281,7 +282,7 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
         if (this._texture)
             this._calculateUV();
     },
-
+    
     /**
      * !#en Returns the original size of the trimmed image.
      * !#zh 获取修剪前的原始大小
@@ -325,15 +326,6 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
             return;
         }
         let w = texture.width, h = texture.height;
-
-        if (self._rotated && cc.game.renderType === cc.game.RENDER_TYPE_CANVAS) {
-            // TODO: rotate texture for canvas
-            // self._texture = _ccsg.Sprite.CanvasRenderCmd._createRotatedTexture(texture, self.getRect());
-            self._rotated = false;
-            w = self._texture.width;
-            h = self._texture.height;
-            self._rect = cc.rect(0, 0, w, h);
-        }
 
         if (self._rect) {
             self._checkRect(self._texture);
@@ -494,17 +486,9 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
      * If you do not need to use the SpriteFrame temporarily, you can call this method so that its texture could be garbage collected. Then when you need to render the SpriteFrame, you should call `ensureLoadTexture` manually to reload texture.
      * !#zh
      * 当你暂时不再使用这个 SpriteFrame 时，可以调用这个方法来保证引用的贴图对象能被 GC。然后当你要渲染 SpriteFrame 时，你需要手动调用 `ensureLoadTexture` 来重新加载贴图。
-     *
      * @method clearTexture
-     * @example
-     * spriteFrame.clearTexture();
-     * // when you need the SpriteFrame again...
-     * spriteFrame.once('load', onSpriteFrameLoaded);
-     * spriteFrame.ensureLoadTexture();
+     * @deprecated since 2.1
      */
-    clearTexture: function () {
-        this._texture = null;   // TODO - release texture
-    },
 
     _checkRect: function (texture) {
         let rect = this._rect;
@@ -580,6 +564,30 @@ let SpriteFrame = cc.Class(/** @lends cc.SpriteFrame# */{
                 }
             }
         }
+    },
+
+    _setDynamicAtlasFrame (frame) {
+        if (!frame) return;
+
+        this._original = {
+            _texture : this._texture,
+            _x : this._rect.x,
+            _y : this._rect.y
+        }
+        
+        this._texture = frame.texture;
+        this._rect.x = frame.x;
+        this._rect.y = frame.y;
+        this._calculateUV();
+    },
+
+    _resetDynamicAtlasFrame () {
+        if (!this._original) return;
+        this._rect.x = this._original._x;
+        this._rect.y = this._original._y;
+        this._texture = this._original._texture;
+        this._original = null;
+        this._calculateUV();
     },
 
     _calculateUV () {

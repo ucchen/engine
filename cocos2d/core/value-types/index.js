@@ -25,12 +25,16 @@
  ****************************************************************************/
 
 require('./value-type');
-require('./vec2');
-require('./vec3');
-require('./quat');
-require('./mat4');
-require('./size');
-require('./rect');
-require('./color');
 
-cc.vmath = require('../renderer/render-engine').math;
+cc.vmath = require('../vmath').default;
+
+module.exports = {
+    Vec2: require('./vec2'),
+    Vec3: require('./vec3'),
+    Vec4: require('./vec4'),
+    Quat: require('./quat'),
+    Mat4: require('./mat4'),
+    Size: require('./size'),
+    Rect: require('./rect'),
+    Color: require('./color'),
+};

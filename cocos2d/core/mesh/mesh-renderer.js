@@ -23,105 +23,153 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+import Assembler from '../renderer/assembler';
+import InputAssembler from '../../renderer/core/input-assembler';
+import IARenderData from '../../renderer/render-data/ia-render-data';
+import gfx from '../../renderer/gfx';
+import vec3 from '../vmath/vec3';
+
+const Material = require('../assets/material/CCMaterial');
 const MeshRenderer = require('./CCMeshRenderer');
 
-const renderEngine = require('../renderer/render-engine');
-const IARenderData = renderEngine.IARenderData;
-const gfx = renderEngine.gfx;
-const InputAssembler = renderEngine.InputAssembler;
+let _idRenderData = new IARenderData();
 
-const BLACK_COLOR = cc.Color.BLACK;
+export default class MeshRendererAssembler extends Assembler {
+    constructor (comp) {
+        super(comp);
+        this._ias = [];
+    }
 
-let meshRendererAssembler = {
-    useModel: true,
     updateRenderData (comp) {
-        let renderDatas = comp._renderDatas;
-        renderDatas.length = 0;
+        let ias = this._ias;
+        ias.length = 0;
         if (!comp.mesh) return;
         let submeshes = comp.mesh._subMeshes;
         for (let i = 0; i < submeshes.length; i++) {
-            let data = new IARenderData();
-            data.material = comp._materials[i];
-            data.ia = submeshes[i];
-            renderDatas.push(data);
+            ias.push(submeshes[i]);
         }
-    },
-
-    createWireFrameData (ia, oldIbData, material, renderer) {
-        let data = new IARenderData();
-        let m = material.clone();
-        m.color = BLACK_COLOR;
-        m.useTexture = false;
-        m._mainTech._passes[0].setDepth(true, true);
-        data.material = m;
-
-        let indices = [];
-        for (let i = 0; i < oldIbData.length; i+=3) {
-            let a = oldIbData[ i + 0 ];
-            let b = oldIbData[ i + 1 ];
-            let c = oldIbData[ i + 2 ];
-            indices.push(a, b, b, c, c, a);
-        }
-
-        let ibData = new Uint16Array(indices);
-        let ib = new gfx.IndexBuffer(
-            renderer._device,
-            gfx.INDEX_FMT_UINT16,
-            gfx.USAGE_STATIC,
-            ibData,
-            ibData.length
-        );
-
-        data.ia = new renderEngine.InputAssembler(ia._vertexBuffer, ib, gfx.PT_LINES);
-        return data;
-    },
+    }
 
     fillBuffers (comp, renderer) {
         if (!comp.mesh) return;
 
-        renderer._flush();
-
-        let renderDatas = comp._renderDatas;
-        let submeshes = comp.mesh._subMeshes;
-        if (cc.macro.SHOW_MESH_WIREFRAME) {
-            if (renderDatas.length === submeshes.length) {
-                let ibs = comp.mesh._ibs;
-                for (let i = 0; i < submeshes.length; i++) {
-                    let data = renderDatas[i];
-                    renderDatas.push( this.createWireFrameData(data.ia, ibs[i].data, data.material, renderer) );
-                }
-            }
-        }
-        else {
-            renderDatas.length = submeshes.length;
-        }
-
-        let tmpMaterial = renderer.material;
-
-        let tmpNode = renderer.node;
-        renderer.node = comp._material.useModel ? comp.node : renderer._dummyNode;
-
         comp.mesh._uploadData();
 
-        let textures = comp.textures;
-        let materials = comp._materials;
-        for (let i = 0; i < renderDatas.length; i++) {
-            let renderData = renderDatas[i];
-            let material = renderData.material;
-            if (textures[i]) {
-                material.texture = textures[i];
-            }
-            else {
-                material.useTexture = false;
+        // update custom properties
+        let isCustomPropertiesSame = renderer.customProperties && 
+            renderer.customProperties.getHash() === comp._customProperties.getHash();
+
+
+        // update culling mask
+        let isCullingMaskSame = renderer.cullingMask === comp.node._cullingMask;
+
+        let enableAutoBatch = comp.enableAutoBatch;
+
+        let materials = comp.sharedMaterials;
+        let ias = this._ias;
+        let subDatas = comp.mesh.subDatas;
+        for (let i = 0; i < ias.length; i++) {
+            let ia = ias[i];
+            let meshData = subDatas[i];
+
+            let material = materials[i] || materials[0];
+
+            if (!enableAutoBatch || !meshData.canBatch || ia._primitiveType !== gfx.PT_TRIANGLES) {
+                renderer._flush();
+
+                renderer.material = material;
+                renderer.cullingMask = comp.node._cullingMask;
+                renderer.customProperties = comp._customProperties;
+                renderer.node = comp.getRenderNode();
+
+                renderer._flushIA(ia);
+
+                continue;
             }
 
-            renderer.material = material;
-            renderer._flushIA(renderData);
+            if (!isCustomPropertiesSame ||
+                !isCullingMaskSame ||
+                material.getHash() !== renderer.material.getHash()) {
+                renderer._flush();
+                renderer.material = material;
+                renderer.cullingMask = comp.node._cullingMask;
+                renderer.customProperties = comp._customProperties;
+                renderer.node = renderer._dummyNode;
+            }
+            
+            this._fillBuffer(comp, meshData, renderer);
         }
 
-        renderer.node = tmpNode;
-        renderer.material = tmpMaterial;
+        if (cc.macro.SHOW_MESH_WIREFRAME) {
+            this._drawWireFrames(comp, renderer);
+        }
     }
-};
 
-module.exports = MeshRenderer._assembler = meshRendererAssembler;
+    _fillBuffer (comp, meshData, renderer) {
+        let matrix = comp.node._worldMatrix;
+        let vData = meshData.vData;
+
+        let vtxFormat = meshData.vfm;
+        let attrPos = vtxFormat._attr2el[gfx.ATTR_POSITION];
+        let attrOffset = attrPos.offset / 4;
+        let elementCount = vtxFormat._bytes / 4;
+
+        let vertexCount = vData.length / elementCount | 0;
+        
+        let indices = meshData.iData;
+        let indicesCount = indices.length;
+
+        let buffer = renderer.getBuffer('mesh', vtxFormat);
+        let offsetInfo = buffer.request(vertexCount, indicesCount);
+        
+        // buffer data may be realloc, need get reference after request.
+        let indiceOffset = offsetInfo.indiceOffset,
+            vertexOffset = offsetInfo.byteOffset >> 2,
+            vertexId = offsetInfo.vertexOffset,
+            vbuf = buffer._vData,
+            ibuf = buffer._iData;
+
+        let tmpV3 = cc.v3();
+        for (let i = 0; i < vertexCount; i++) {
+            let offset = i * elementCount;
+            for (let j = 0; j < attrOffset; j++) {
+                vbuf[vertexOffset++] = vData[offset + j];
+            }
+
+            tmpV3.x = vData[offset + attrOffset];
+            tmpV3.y = vData[offset + attrOffset + 1];
+            tmpV3.z = vData[offset + attrOffset + 2];
+
+            vec3.transformMat4(tmpV3, tmpV3, matrix);
+
+            vbuf[vertexOffset++] = tmpV3.x;
+            vbuf[vertexOffset++] = tmpV3.y;
+            vbuf[vertexOffset++] = tmpV3.z;
+
+            for (let j = attrOffset + 3; j < elementCount; j++) {
+                vbuf[vertexOffset++] = vData[offset + j];
+            }
+        }
+
+        for (let i = 0; i < indicesCount; i++) {
+            ibuf[indiceOffset + i] = vertexId + indices[i];
+        }
+    }
+
+    _drawWireFrames (comp, renderer) {
+        renderer._flush();
+        
+        comp._updateWireFrameDatas();
+        renderer.node = comp.getRenderNode();
+        
+        let wireFrameDatas = comp._wireFrameDatas;
+        for (let i = 0; i < wireFrameDatas.length; i++) {
+            let wireFrameData = wireFrameDatas[i];
+            let material = wireFrameData.material;
+            renderer.material = material;
+            renderer._flushIA(wireFrameData.ia);
+        }
+    }
+}
+
+Assembler.register(MeshRenderer, MeshRendererAssembler);

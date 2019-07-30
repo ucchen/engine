@@ -27,35 +27,39 @@
 const Node = require('../CCNode');
 const EventType = Node.EventType;
 const DirtyFlag = Node._LocalDirtyFlag;
-const math = require('../renderer/render-engine').math;
 const RenderFlow = require('../renderer/render-flow');
+
+import { mat4 } from '../vmath';
 
 // ====== Node transform polyfills ======
 const ONE_DEGREE = Math.PI / 180;
 
 const POSITION_ON = 1 << 0;
 const SCALE_ON = 1 << 1;
-const ROTATION_ON = 1 << 2;
+const ERR_INVALID_NUMBER = CC_EDITOR && 'The %s is invalid';
+
+let _quat = cc.quat();
 
 function _updateLocalMatrix3d () {
     if (this._localMatDirty) {
         // Update transform
         let t = this._matrix;
-        math.mat4.fromRTS(t, this._quat, this._position, this._scale);
+        let tm = t.m;
+        mat4.fromTRSArray(t, this._trs);
 
         // skew
         if (this._skewX || this._skewY) {
-            let a = t.m00, b = t.m01, c = t.m04, d = t.m05;
+            let a = tm[0], b = tm[1], c = tm[4], d = tm[5];
             let skx = Math.tan(this._skewX * ONE_DEGREE);
             let sky = Math.tan(this._skewY * ONE_DEGREE);
             if (skx === Infinity)
                 skx = 99999999;
             if (sky === Infinity)
                 sky = 99999999;
-            t.m00 = a + c * sky;
-            t.m01 = b + d * sky;
-            t.m04 = c + a * skx;
-            t.m05 = d + b * skx;
+            tm[0] = a + c * sky;
+            tm[1] = b + d * sky;
+            tm[4] = c + a * skx;
+            tm[5] = d + b * skx;
         }
         this._localMatDirty = 0;
         // Register dirty status of world matrix so that it can be recalculated
@@ -71,10 +75,10 @@ function _calculWorldMatrix3d () {
 
     if (this._parent) {
         let parentMat = this._parent._worldMatrix;
-        math.mat4.mul(this._worldMatrix, parentMat, this._matrix);
+        mat4.mul(this._worldMatrix, parentMat, this._matrix);
     }
     else {
-        math.mat4.copy(this._worldMatrix, this._matrix);
+        mat4.copy(this._worldMatrix, this._matrix);
     }
     this._worldMatDirty = false;
 }
@@ -92,20 +96,20 @@ function setPosition (newPosOrX, y, z) {
         z = z || 0
     }
 
-    let pos = this._position;
-    if (pos.x === x && pos.y === y && pos.z === z) {
+    let trs = this._trs;
+    if (trs[0] === x && trs[1] === y && trs[2] === z) {
         return;
     }
 
     if (CC_EDITOR) {
-        var oldPosition = new cc.Vec3(pos);
+        var oldPosition = new cc.Vec3(trs[0], trs[1], trs[2]);
     }
 
-    pos.x = x;
-    pos.y = y;
-    pos.z = z;
+    trs[0] = x;
+    trs[1] = y;
+    trs[2] = z;
     this.setLocalDirty(DirtyFlag.POSITION);
-    this._renderFlag |= RenderFlow.FLAG_WORLD_TRANSFORM;
+    !CC_NATIVERENDERER && (this._renderFlag |= RenderFlow.FLAG_WORLD_TRANSFORM);
 
     // fast check event
     if (this._eventMask & POSITION_ON) {
@@ -121,7 +125,7 @@ function setPosition (newPosOrX, y, z) {
 function setScale (x, y, z) {
     if (x && typeof x !== 'number') {
         y = x.y;
-        z = x.z || 1;
+        z = x.z === undefined ? 1 : x.z;
         x = x.x;
     }
     else if (x !== undefined && y === undefined) {
@@ -131,12 +135,13 @@ function setScale (x, y, z) {
     else if (z === undefined) {
         z = 1;
     }
-    if (this._scale.x !== x || this._scale.y !== y || this._scale.z !== z) {
-        this._scale.x = x;
-        this._scale.y = y;
-        this._scale.z = z;
+    let trs = this._trs;
+    if (trs[7] !== x || trs[8] !== y || trs[9] !== z) {
+        trs[7] = x;
+        trs[8] = y;
+        trs[9] = z;
         this.setLocalDirty(DirtyFlag.SCALE);
-        this._renderFlag |= RenderFlow.FLAG_TRANSFORM;
+        !CC_NATIVERENDERER && (this._renderFlag |= RenderFlow.FLAG_TRANSFORM);
 
         if (this._eventMask & SCALE_ON) {
             this.emit(EventType.SCALE_CHANGED);
@@ -148,14 +153,18 @@ function _update3DFunction () {
     if (this._is3DNode) {
         this._updateLocalMatrix = _updateLocalMatrix3d;
         this._calculWorldMatrix = _calculWorldMatrix3d;
-        this._mulMat = cc.vmath.mat4.mul;
+        this._mulMat = mat4.mul;
     }
     else {
         this._updateLocalMatrix = _updateLocalMatrix2d;
         this._calculWorldMatrix = _calculWorldMatrix2d;
         this._mulMat = _mulMat2d;
     }
+    if (this._renderComponent && this._renderComponent._on3DNodeChanged) {
+        this._renderComponent._on3DNodeChanged();
+    }
     this._renderFlag |= RenderFlow.FLAG_TRANSFORM;
+    this._localMatDirty = DirtyFlag.ALL;
 }
 
 function _upgrade_1x_to_2x () {
@@ -172,7 +181,6 @@ const _updateLocalMatrix2d = proto._updateLocalMatrix;
 const _calculWorldMatrix2d = proto._calculWorldMatrix;
 const _upgrade_1x_to_2x_2d = proto._upgrade_1x_to_2x;
 const _mulMat2d = proto._mulMat;
-const _onBatchCreated2d = proto._onBatchCreated;
 
 proto.setPosition = setPosition;
 proto.setScale = setScale;
@@ -191,12 +199,12 @@ cc.js.getset(proto, 'is3DNode', function () {
 });
 
 cc.js.getset(proto, 'scaleZ', function () {
-    return this._scale.z;
+    return this._trs[9];
 }, function (v) {
-    if (this._scale.z !== value) {
-        this._scale.z = value;
+    if (this._trs[9] !== value) {
+        this._trs[9] = value;
         this.setLocalDirty(DirtyFlag.SCALE);
-        this._renderFlag |= RenderFlow.FLAG_TRANSFORM;
+        !CC_NATIVERENDERER && (this._renderFlag |= RenderFlow.FLAG_TRANSFORM);
 
         if (this._eventMask & SCALE_ON) {
             this.emit(EventType.SCALE_CHANGED);
@@ -205,14 +213,14 @@ cc.js.getset(proto, 'scaleZ', function () {
 });
 
 cc.js.getset(proto, 'z', function () {
-    return this._position.z;
+    return this._trs[2];
 }, function (value) {
-    let localPosition = this._position;
-    if (value !== localPosition.z) {
+    let trs = this._trs;
+    if (value !== trs[2]) {
         if (!CC_EDITOR || isFinite(value)) {
-            localPosition.z = value;
+            trs[2] = value;
             this.setLocalDirty(DirtyFlag.POSITION);
-            this._renderFlag |= RenderFlow.FLAG_WORLD_TRANSFORM;
+            !CC_NATIVERENDERER && (this._renderFlag |= RenderFlow.FLAG_WORLD_TRANSFORM);
             // fast check event
             if (this._eventMask & POSITION_ON) {
                 this.emit(EventType.POSITION_CHANGED);
@@ -229,20 +237,22 @@ cc.js.getset(proto, 'eulerAngles', function () {
         return this._eulerAngles;
     }
     else {
-        return this._quat.getEulerAngles(cc.v3());
+        return this._quat.toEuler(this._eulerAngles);
     }
 }, function (v) {
     if (CC_EDITOR) {
         this._eulerAngles.set(v);
     }
 
-    math.quat.fromEuler(this._quat, v.x, v.y, v.z);
+    _quat.fromEuler(v);
+    _quat.toRotation(this._trs);
     this.setLocalDirty(DirtyFlag.ROTATION);
-    this._renderFlag |= RenderFlow.FLAG_TRANSFORM;
+    !CC_NATIVERENDERER && (this._renderFlag |= RenderFlow.FLAG_TRANSFORM);
 });
 
 // This property is used for Mesh Skeleton Animation
 // Should be rememoved when node.rotation upgrade to quaternion value
 cc.js.getset(proto, 'quat', function () {
-    return this._quat;
+    let trs = this._trs;
+    return cc.quat(trs[3], trs[4], trs[5], trs[6]);
 }, proto.setRotation);

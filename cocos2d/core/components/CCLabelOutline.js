@@ -25,7 +25,7 @@
  ****************************************************************************/
 
 /**
- * !#en Outline effect used to change the display, only used for TTF font
+ * !#en Outline effect used to change the display, only for system fonts or TTF fonts
  * !#zh 描边效果组件,用于字体描边,只能用于系统字体
  * @class LabelOutline
  * @extends Component
@@ -33,6 +33,7 @@
  *  // Create a new node and add label components.
  *  var node = new cc.Node("New Label");
  *  var label = node.addComponent(cc.Label);
+ *  label.string = "hello world";
  *  var outline = node.addComponent(cc.LabelOutline);
  *  node.parent = this.node;
  */
@@ -47,23 +48,24 @@ let LabelOutline = cc.Class({
     },
 
     properties: {
-        _color: cc.color(255,255,255,255),
+        _color: cc.Color.WHITE,
         _width: 1,
 
         /**
-         * !#en Change the outline color
+         * !#en outline color
          * !#zh 改变描边的颜色
          * @property color
          * @type {Color}
          * @example
-         * outline.color = new cc.Color(0.5, 0.3, 0.7, 1.0);;
+         * outline.color = cc.Color.BLACK;
          */
         color: {
+            tooltip: CC_DEV && 'i18n:COMPONENT.outline.color',
             get: function () {
                 return this._color;
             },
             set: function (value) {
-                this._color = cc.color(value);
+                this._color = value;
                 this._updateRenderData();
             }
         },
@@ -77,20 +79,30 @@ let LabelOutline = cc.Class({
          * outline.width = 3;
          */
         width: {
+            tooltip: CC_DEV && 'i18n:COMPONENT.outline.width',
             get: function () {
                 return this._width;
             },
             set: function (value) {
                 this._width = value;
                 this._updateRenderData();
-            }
+            },
+            range: [0, 512],
         }
+    },
+
+    onEnable () {
+        this._updateRenderData();
+    },
+
+    onDisable () {
+        this._updateRenderData();
     },
 
     _updateRenderData () {
         let label = this.node.getComponent(cc.Label);
         if (label) {
-            label._updateRenderData(true);
+            label._lazyUpdateRenderData();
         }
     }
 

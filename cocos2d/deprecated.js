@@ -181,6 +181,15 @@ if (CC_DEBUG) {
     markAsRemoved(cc.SpriteFrame, [
         'addLoadedEventListener'
     ]);
+    markFunctionWarning(cc.Sprite.prototype, {
+        setState: 'cc.Sprite.setMaterial',
+        getState: 'cc.Sprite.getMaterial'
+    }, 'cc.Sprite');
+
+    js.get(cc.SpriteFrame.prototype, 'clearTexture', function () {
+        cc.warnID(1406, 'cc.SpriteFrame', 'clearTexture');
+        return function () {};
+    });
 
     // cc.textureCache
     js.get(cc, 'textureCache', function () {
@@ -265,6 +274,8 @@ if (CC_DEBUG) {
         setAnimationInterval: 'cc.game.setFrameRate',
         isDisplayStats: 'cc.debug.isDisplayStats',
         setDisplayStats: 'cc.debug.setDisplayStats',
+        stopAnimation: 'cc.game.pause',
+        startAnimation: 'cc.game.resume',
     }, 'cc.Director');
     markAsRemoved(cc.Director, [
         'pushScene',
@@ -348,12 +359,6 @@ if (CC_DEBUG) {
         'ignoreAnchorPointForPosition',
         'isRunning',
         '_sgNode',
-    ]);
-
-    markAsDeprecated(cc.Node, [
-        ['rotationX', 'eulerAngles'],
-        ['rotationY', 'eulerAngles'],
-        ['rotation', 'angle'],
     ]);
 
     markFunctionWarning(cc.Node.prototype, {
@@ -606,6 +611,10 @@ if (CC_DEBUG) {
         cc.warnID(1400, 'cc.KEY', 'cc.macro.KEY');
         return cc.macro.KEY;
     });
+    js.get(cc, 'Easing', function () {
+        cc.warnID(1400, 'cc.Easing', 'cc.easing');
+        return cc.easing;
+    });
 
     // cc.pool
     js.get(cc, 'pool', function () {
@@ -623,4 +632,20 @@ if (CC_DEBUG) {
     if (typeof dragonBones !== 'undefined') {
         js.obsolete(dragonBones.CCFactory, 'dragonBones.CCFactory.getFactory', 'getInstance');
     }
+
+    // renderEngine
+    cc.renderer.renderEngine = {
+        get gfx () {
+            cc.warnID(1400, 'cc.renderer.renderEngine.gfx', 'cc.gfx');
+            return cc.gfx;
+        },
+        get math () {
+            cc.warnID(1400, 'cc.renderer.renderEngine.math', 'cc.vmath');
+            return cc.vmath;
+        },
+        get InputAssembler () {
+            cc.warnID(1400, 'cc.renderer.renderEngine.InputAssembler', 'cc.renderer.InputAssembler');
+            return cc.renderer.InputAssembler;
+        }
+    };
 }

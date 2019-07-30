@@ -200,6 +200,20 @@ let Animation = cc.Class({
             visible: false
         },
 
+        // This property is used to watch clip changes in editor.
+        // Don't use in your game, use addClip/removeClip instead.
+        _writableClips: {
+            get () {
+                return this._clips;
+            },
+            set (val) {
+                this._didInit = false;
+                this._clips = val;
+                this._init();
+            },
+            type: [AnimationClip],
+        },
+
         /**
          * !#en All the clips used in this animation.
          * !#zh 通过脚本可以访问并播放的 AnimationClip 列表。
@@ -431,8 +445,8 @@ let Animation = cc.Class({
         if (CC_EDITOR && (!state || !cc.js.array.contains(this._clips, state.clip))) {
             this._didInit = false;
 
-            if (this.animator) {
-                this.animator.stop();
+            if (this._animator) {
+                this._animator.stop();
             }
 
             this._init();

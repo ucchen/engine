@@ -23,24 +23,20 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+import { mat4 } from '../core/vmath';
+
 const utils = require('../core/platform/utils');
 const sys = require('../core/platform/CCSys');
-const renderEngine = require('../core/renderer/render-engine');
-const math = renderEngine.math;
 
-let _mat4_temp = math.mat4.create();
+const READY_STATE = {
+    HAVE_NOTHING: 0,
+    HAVE_METADATA: 1,
+    HAVE_CURRENT_DATA: 2,
+    HAVE_FUTURE_DATA: 3,
+    HAVE_ENOUGH_DATA: 4
+};
 
-// ios brower need to wait until the video's loadedmetadata event
-// has been fired before calling webkitEnterFullScreen()
-function triggerFullScene (video, enable) {
-    if (!video) return;
-    if (enable) {
-        video.webkitEnterFullscreen && video.webkitEnterFullscreen();
-    }
-    else {
-        video.webkitExitFullscreen && video.webkitExitFullscreen();
-    }
-}
+let _mat4_temp = mat4.create();
 
 let VideoPlayerImpl = cc.Class({
     name: 'VideoPlayerImpl',
@@ -52,13 +48,12 @@ let VideoPlayerImpl = cc.Class({
         this._video = null;
         this._url = '';
 
+        this._waitingFullscreen = false;
         this._fullScreenEnabled = false;
 
         this._loadedmeta = false;
         this._loaded = false;
         this._visible = false;
-        // 有一些浏览器第一次播放视频需要特殊处理，这个标记用来标识是否播放过
-        this._played = false;
         this._playing = false;
         this._ignorePause = false;
 
@@ -82,8 +77,9 @@ let VideoPlayerImpl = cc.Class({
         let cbs = this.__eventListeners;
         cbs.loadedmetadata = function () {
             self._loadedmeta = true;
-            if (sys.os === sys.OS_IOS && sys.isBrowser) {
-                triggerFullScene(video, self._fullScreenEnabled);
+            if (self._waitingFullscreen) {
+                self._waitingFullscreen = false;
+                self._toggleFullscreen(true);
             }
             self._dispatchEvent(VideoPlayerImpl.EventType.META_LOADED);
         };
@@ -95,12 +91,18 @@ let VideoPlayerImpl = cc.Class({
         cbs.play = function () {
             if (self._video !== video) return;
             self._playing = true;
+            self._updateVisibility();
             self._dispatchEvent(VideoPlayerImpl.EventType.PLAYING);
         };
+        // pause and stop callback
         cbs.pause = function () {
-            if (self._ignorePause || self._video !== video) return;
+            if (self._video !== video) {
+                return;
+            }
             self._playing = false;
-            self._dispatchEvent(VideoPlayerImpl.EventType.PAUSED);
+            if (!self._ignorePause) {
+                self._dispatchEvent(VideoPlayerImpl.EventType.PAUSED);
+            }
         };
         cbs.click = function () {
             self._dispatchEvent(VideoPlayerImpl.EventType.CLICKED);
@@ -113,36 +115,38 @@ let VideoPlayerImpl = cc.Class({
         video.addEventListener("click", cbs.click);
 
         function onCanPlay () {
-            if (this._loaded)
+            if (self._loaded || self._playing)
                 return;
-            let video = this._video;
-            if (video.readyState === 4) {
-                this._loaded = true;
-                // node.setContentSize(node._contentSize.width, node._contentSize.height);
+            let video = self._video;
+            if (video.readyState === READY_STATE.HAVE_ENOUGH_DATA ||
+                video.readyState === READY_STATE.HAVE_METADATA) {
                 video.currentTime = 0;
-                this._dispatchEvent(VideoPlayerImpl.EventType.READY_TO_PLAY);
-                this._updateVisibility();
+                self._loaded = true;
+                self._dispatchEvent(VideoPlayerImpl.EventType.READY_TO_PLAY);
+                self._updateVisibility();
             }
         }
 
-        cbs.onCanPlay = onCanPlay.bind(this);
+        cbs.onCanPlay = onCanPlay;
         video.addEventListener('canplay', cbs.onCanPlay);
         video.addEventListener('canplaythrough', cbs.onCanPlay);
         video.addEventListener('suspend', cbs.onCanPlay);
     },
 
     _updateVisibility () {
-        if (!this._video) return;
         let video = this._video;
+        if (!video) return;
+
         if (this._visible) {
             video.style.visibility = 'visible';
+            this._forceUpdate = true;
         }
         else {
             video.style.visibility = 'hidden';
             video.pause();
             this._playing = false;
+            this._forceUpdate = false;
         }
-        this._forceUpdate = true;
     },
 
     _updateSize (width, height) {
@@ -153,7 +157,7 @@ let VideoPlayerImpl = cc.Class({
         video.style.height = height + 'px';
     },
 
-    _createDom () {
+    _createDom (muted) {
         let video = document.createElement('video');
         video.style.position = "absolute";
         video.style.bottom = "0px";
@@ -161,21 +165,20 @@ let VideoPlayerImpl = cc.Class({
         video.className = "cocosVideo";
         video.setAttribute('preload', 'auto');
         video.setAttribute('webkit-playsinline', '');
+        // This x5-playsinline tag must be added, otherwise the play, pause events will only fire once, in the qq browser.
+        video.setAttribute("x5-playsinline", '');
         video.setAttribute('playsinline', '');
-
-        // Stupid tencent x5 adaptation
-        let orientation = cc.winSize.width > cc.winSize.height ? "landscape" : "portrait";
-        video.setAttribute("x5-playsinline", "");
-        video.setAttribute("x5-video-player-type", "h5");
-        video.setAttribute("x5-video-orientation", orientation);
+        if (muted) {
+            video.setAttribute('muted', '');
+        }
 
         this._video = video;
         cc.game.container.appendChild(video);
     },
 
-    createDomElementIfNeeded: function () {
+    createDomElementIfNeeded: function (muted) {
         if (!this._video) {
-            this._createDom();
+            this._createDom(muted);
         }
     },
 
@@ -207,7 +210,7 @@ let VideoPlayerImpl = cc.Class({
         this._url = "";
     },
 
-    setURL (path) {
+    setURL (path, muted) {
         let source, extname;
 
         if (this._url === path) {
@@ -216,13 +219,12 @@ let VideoPlayerImpl = cc.Class({
 
         this._url = path;
         this.removeDom();
-        this.createDomElementIfNeeded();
+        this.createDomElementIfNeeded(muted);
         this._bindEvent();
 
         let video = this._video;
         video.style["visibility"] = "hidden";
         this._loaded = false;
-        this._played = false;
         this._playing = false;
         this._loadedmeta = false;
 
@@ -247,38 +249,26 @@ let VideoPlayerImpl = cc.Class({
 
     play: function () {
         let video = this._video;
-        if (!video || !this._visible) return;
-
-        this._played = true;
-        if (this._playing) {
-            return;
-        }
+        if (!video || !this._visible || this._playing) return;
 
         if (VideoPlayerImpl._polyfill.autoplayAfterOperation) {
             let self = this;
             setTimeout(function () {
                 video.play();
-                self._playing = !video.paused;
             }, 20);
         }
         else {
             video.play();
-            this._playing = !video.paused;
         }
     },
 
     pause: function () {
         let video = this._video;
-        if (!this._playing) return;
-
-        this._playing = false;
-        if (!video) {
-            return;
-        }
+        if (!this._playing || !video) return;
         video.pause();
     },
 
-    _resume: function () {
+    resume: function () {
         this.play();
     },
 
@@ -286,15 +276,13 @@ let VideoPlayerImpl = cc.Class({
         let video = this._video;
         if (!video || !this._visible) return;
         this._ignorePause = true;
-        video.pause();
-        let self = this;
-        setTimeout(function () {
-            self._dispatchEvent(VideoPlayerImpl.EventType.STOPPED);
-            self._ignorePause = false;
-        }, 0);
-        // 恢复到视频起始位置
         video.currentTime = 0;
-        this._playing = false;
+        video.pause();
+        setTimeout(function () {
+            this._dispatchEvent(VideoPlayerImpl.EventType.STOPPED);
+            this._ignorePause = false;
+        }.bind(this), 0);
+
     },
 
     setVolume: function (volume) {
@@ -356,6 +344,9 @@ let VideoPlayerImpl = cc.Class({
     },
 
     setKeepAspectRatioEnabled: function () {
+        if (CC_EDITOR) {
+            return;
+        }
         cc.logID(7700);
     },
 
@@ -363,24 +354,38 @@ let VideoPlayerImpl = cc.Class({
         return true;
     },
 
-    setFullScreenEnabled: function (enable) {
-        let video =  this._video;
+    _toggleFullscreen: function (enable) {
+        let self = this, video = this._video;
         if (!video) {
             return;
         }
-        if (sys.os === sys.OS_IOS && sys.isBrowser) {
-            this._fullScreenEnabled = enable;
-            if (this._loadedmeta) {
-                triggerFullScene(video, enable);
+
+        // Monitor video entry and exit full-screen events
+        function handleFullscreenChange (event) {
+            let fullscreenElement = sys.browserType === sys.BROWSER_TYPE_IE ? document.msFullscreenElement : document.fullscreenElement;
+            self._fullScreenEnabled =  (fullscreenElement === video);
+        }
+        function handleFullScreenError (event) {
+            self._fullScreenEnabled = false;
+        }
+
+        if (enable) {
+            if (sys.browserType === sys.BROWSER_TYPE_IE) {
+                // fix IE full screen content is not centered
+                video.style['transform'] = '';
             }
+            cc.screen.requestFullScreen(video, handleFullscreenChange, handleFullScreenError);
+        } else if (cc.screen.fullScreen()) {
+            cc.screen.exitFullScreen(video);
+        }
+    },
+
+    setFullScreenEnabled: function (enable) {
+        if (!this._loadedmeta && enable) {
+            this._waitingFullscreen = true;
         }
         else {
-            if (enable) {
-                cc.screen.requestFullScreen(video);
-            }
-            else {
-                cc.screen.exitFullScreen(video);
-            }
+            this._toggleFullscreen(enable);
         }
     },
 
@@ -435,24 +440,31 @@ let VideoPlayerImpl = cc.Class({
     },
 
     updateMatrix (node) {
-        if (!this._video || !this._visible) return;
+        if (!this._video || !this._visible || this._fullScreenEnabled) return;
 
         node.getWorldMatrix(_mat4_temp);
+
+        let renderCamera = cc.Camera._findRendererCamera(node);
+        if (renderCamera) {
+            renderCamera.worldMatrixToScreen(_mat4_temp, _mat4_temp, cc.visibleRect.width, cc.visibleRect.height);
+        }
+
+        let _mat4_tempm = _mat4_temp.m;
         if (!this._forceUpdate &&
-            this._m00 === _mat4_temp.m00 && this._m01 === _mat4_temp.m01 &&
-            this._m04 === _mat4_temp.m04 && this._m05 === _mat4_temp.m05 &&
-            this._m12 === _mat4_temp.m12 && this._m13 === _mat4_temp.m13 &&
+            this._m00 === _mat4_tempm[0] && this._m01 === _mat4_tempm[1] &&
+            this._m04 === _mat4_tempm[4] && this._m05 === _mat4_tempm[5] &&
+            this._m12 === _mat4_tempm[12] && this._m13 === _mat4_tempm[13] &&
             this._w === node._contentSize.width && this._h === node._contentSize.height) {
             return;
         }
 
         // update matrix cache
-        this._m00 = _mat4_temp.m00;
-        this._m01 = _mat4_temp.m01;
-        this._m04 = _mat4_temp.m04;
-        this._m05 = _mat4_temp.m05;
-        this._m12 = _mat4_temp.m12;
-        this._m13 = _mat4_temp.m13;
+        this._m00 = _mat4_tempm[0];
+        this._m01 = _mat4_tempm[1];
+        this._m04 = _mat4_tempm[4];
+        this._m05 = _mat4_tempm[5];
+        this._m12 = _mat4_tempm[12];
+        this._m13 = _mat4_tempm[13];
         this._w = node._contentSize.width;
         this._h = node._contentSize.height;
 
@@ -463,7 +475,7 @@ let VideoPlayerImpl = cc.Class({
         scaleY /= dpr;
 
         let container = cc.game.container;
-        let a = _mat4_temp.m00 * scaleX, b = _mat4_temp.m01, c = _mat4_temp.m04, d = _mat4_temp.m05 * scaleY;
+        let a = _mat4_tempm[0] * scaleX, b = _mat4_tempm[1], c = _mat4_tempm[4], d = _mat4_tempm[5] * scaleY;
 
         let offsetX = container && container.style.paddingLeft ? parseInt(container.style.paddingLeft) : 0;
         let offsetY = container && container.style.paddingBottom ? parseInt(container.style.paddingBottom) : 0;
@@ -476,14 +488,19 @@ let VideoPlayerImpl = cc.Class({
             h = this._h * scaleY;
         }
         else {
-            this._updateSize(this._w, this._h);
             w = this._w * scaleX;
             h = this._h * scaleY;
+            this._updateSize(this._w, this._h);
         }
 
-        let appx = (w * _mat4_temp.m00) * node._anchorPoint.x;
-        let appy = (h * _mat4_temp.m05) * node._anchorPoint.y;
-        let tx = _mat4_temp.m12 * scaleX - appx + offsetX, ty = _mat4_temp.m13 * scaleY - appy + offsetY;
+        let appx = (w * _mat4_tempm[0]) * node._anchorPoint.x;
+        let appy = (h * _mat4_tempm[5]) * node._anchorPoint.y;
+
+        let viewport = cc.view._viewportRect;
+        offsetX += viewport.x / dpr;
+        offsetY += viewport.y / dpr;
+
+        let tx = _mat4_tempm[12] * scaleX - appx + offsetX, ty = _mat4_tempm[13] * scaleY - appy + offsetY;
 
         let matrix = "matrix(" + a + "," + -b + "," + -c + "," + d + "," + tx + "," + -ty + ")";
         this._video.style['transform'] = matrix;
@@ -545,16 +562,21 @@ VideoPlayerImpl._polyfill = {
  * But native does not support this encode,
  * so it is best to provide mp4 and webm or ogv file
  */
+
+// TODO: adapt wx video player
+// issue: https://github.com/cocos-creator/2d-tasks/issues/1364
 let dom = document.createElement("video");
-if (sys.platform !== sys.WECHAT_GAME) {
+if (dom.canPlayType) {
     if (dom.canPlayType("video/ogg")) {
         VideoPlayerImpl._polyfill.canPlayType.push(".ogg");
         VideoPlayerImpl._polyfill.canPlayType.push(".ogv");
     }
-    if (dom.canPlayType("video/mp4"))
+    if (dom.canPlayType("video/mp4")) {
         VideoPlayerImpl._polyfill.canPlayType.push(".mp4");
-    if (dom.canPlayType("video/webm"))
+    }
+    if (dom.canPlayType("video/webm")) {
         VideoPlayerImpl._polyfill.canPlayType.push(".webm");
+    }
 }
 
 if (sys.browserType === sys.BROWSER_TYPE_FIREFOX) {

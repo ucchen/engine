@@ -28,7 +28,6 @@ var EventTarget = require('./event/event-target');
 require('../audio/CCAudioEngine');
 const debug = require('./CCDebug');
 const renderer = require('./renderer/index.js');
-const inputManager = CC_QQPLAY ? require('./platform/BKInputManager') : require('./platform/CCInputManager');
 const dynamicAtlasManager = require('../core/renderer/utils/dynamic-atlas/manager');
 
 /**
@@ -39,7 +38,6 @@ const dynamicAtlasManager = require('../core/renderer/utils/dynamic-atlas/manage
  * !#en An object to boot the game.
  * !#zh 包含游戏主体信息并负责驱动游戏的游戏对象。
  * @class Game
- * @static
  * @extends EventTarget
  */
 var game = {
@@ -61,7 +59,7 @@ var game = {
     EVENT_HIDE: "game_on_hide",
 
     /**
-     * Event triggered when game back to foreground
+     * !#en Event triggered when game back to foreground
      * Please note that this event is not 100% guaranteed to be fired on Web platform,
      * on native platforms, it corresponds to enter foreground event.
      * !#zh 游戏进入前台运行时触发的事件。
@@ -72,6 +70,15 @@ var game = {
      * @type {String}
      */
     EVENT_SHOW: "game_on_show",
+
+    /**
+     * !#en Event triggered when game restart
+     * !#zh 调用restart后，触发事件。
+     * @property EVENT_RESTART
+     * @constant
+     * @type {String}
+     */
+    EVENT_RESTART: "game_on_restart",
 
     /**
      * Event triggered after game inited, at this point all engine objects and game scripts are loaded
@@ -305,6 +312,7 @@ var game = {
         if (cc.audioEngine) {
             cc.audioEngine._restore();
         }
+        cc.director._resetDeltaTime();
         // Resume main loop
         this._runMainLoop();
     },
@@ -334,15 +342,18 @@ var game = {
             cc.director.getScene().destroy();
             cc.Object._deferredDestroy();
 
-            cc.director.purgeDirector();
-
             // Clean up audio
             if (cc.audioEngine) {
                 cc.audioEngine.uncacheAll();
             }
 
             cc.director.reset();
-            game.onStart();
+
+            game.pause();
+            cc.AssetLibrary._loadBuiltins(() => {
+                game.onStart();
+                game.emit(game.EVENT_RESTART);
+            });
         });
     },
 
@@ -372,19 +383,26 @@ var game = {
     },
 
     _prepareFinished (cb) {
+
+        if (CC_PREVIEW && window.__modular) {
+            window.__modular.run();
+        }
+
         this._prepared = true;
 
         // Init engine
         this._initEngine();
-        // Log engine version
-        console.log('Cocos Creator v' + cc.ENGINE_VERSION);
+        cc.AssetLibrary._loadBuiltins(() => {
+            // Log engine version
+            console.log('Cocos Creator v' + cc.ENGINE_VERSION);
 
-        this._setAnimFrame();
-        this._runMainLoop();
+            this._setAnimFrame();
+            this._runMainLoop();
 
-        this.emit(this.EVENT_GAME_INITED);
+            this.emit(this.EVENT_GAME_INITED);
 
-        if (cb) cb();
+            if (cb) cb();
+        });
     },
 
     eventTargetOn: EventTarget.prototype.on,
@@ -412,8 +430,9 @@ var game = {
      * on<T extends Function>(type: string, callback: T, target?: any, useCapture?: boolean): T
      */
     on (type, callback, target) {
-        // Make sure EVENT_ENGINE_INITED callbacks to be invoked
-        if (this._prepared && type === this.EVENT_ENGINE_INITED) {
+        // Make sure EVENT_ENGINE_INITED and EVENT_GAME_INITED callbacks to be invoked
+        if ((this._prepared && type === this.EVENT_ENGINE_INITED) ||
+            (!this._paused && type === this.EVENT_GAME_INITED)) {
             callback.call(target);
         }
         else {
@@ -439,8 +458,9 @@ var game = {
      * @param {Object} [target] - The target (this object) to invoke the callback, can be null
      */
     once (type, callback, target) {
-        // Make sure EVENT_ENGINE_INITED callbacks to be invoked
-        if (this._prepared && type === this.EVENT_ENGINE_INITED) {
+        // Make sure EVENT_ENGINE_INITED and EVENT_GAME_INITED callbacks to be invoked
+        if ((this._prepared && type === this.EVENT_ENGINE_INITED) ||
+            (!this._paused && type === this.EVENT_GAME_INITED)) {
             callback.call(target);
         }
         else {
@@ -554,11 +574,11 @@ var game = {
 
 //  @Time ticker section
     _setAnimFrame: function () {
-        this._lastTime = new Date();
+        this._lastTime = performance.now();
         var frameRate = game.config.frameRate;
         this._frameTime = 1000 / frameRate;
 
-        if (CC_JSB) {
+        if (CC_JSB || CC_RUNTIME) {
             jsb.setPreferredFramesPerSecond(frameRate);
             window.requestAnimFrame = window.requestAnimationFrame;
             window.cancelAnimFrame = window.cancelAnimationFrame;
@@ -590,7 +610,7 @@ var game = {
         }
     },
     _stTime: function(callback){
-        var currTime = new Date().getTime();
+        var currTime = performance.now();
         var timeToCall = Math.max(0, game._frameTime - (currTime - game._lastTime));
         var id = window.setTimeout(function() { callback(); },
             timeToCall);
@@ -602,21 +622,24 @@ var game = {
     },
     //Run game.
     _runMainLoop: function () {
+        if (CC_EDITOR) {
+            return;
+        }
         var self = this, callback, config = self.config,
             director = cc.director,
             skip = true, frameRate = config.frameRate;
 
         debug.setDisplayStats(config.showFPS);
 
-        callback = function () {
+        callback = function (now) {
             if (!self._paused) {
                 self._intervalId = window.requestAnimFrame(callback);
-                if (!CC_JSB && frameRate === 30) {
+                if (!CC_JSB && !CC_RUNTIME && frameRate === 30) {
                     if (skip = !skip) {
                         return;
                     }
                 }
-                director.mainLoop();
+                director.mainLoop(now);
             }
         };
 
@@ -694,28 +717,13 @@ var game = {
 
         let el = this.config.id,
             width, height,
-            localCanvas, localContainer,
-            isWeChatGame = cc.sys.platform === cc.sys.WECHAT_GAME,
-            isQQPlay = cc.sys.platform === cc.sys.QQ_PLAY;
+            localCanvas, localContainer;
 
-        if (isWeChatGame || CC_JSB) {
+        if (CC_JSB || CC_RUNTIME) {
             this.container = localContainer = document.createElement("DIV");
             this.frame = localContainer.parentNode === document.body ? document.documentElement : localContainer.parentNode;
-            if (cc.sys.browserType === cc.sys.BROWSER_TYPE_WECHAT_GAME_SUB) {
-                localCanvas = window.sharedCanvas || wx.getSharedCanvas();
-            }
-            else if (CC_JSB) {
-                localCanvas = window.__canvas;
-            }
-            else {
-                localCanvas = canvas;
-            }
+            localCanvas = window.__canvas;
             this.canvas = localCanvas;
-        }
-        else if (isQQPlay) {
-            this.container = cc.container = document.createElement("DIV");
-            this.frame = document.documentElement;
-            this.canvas = localCanvas = canvas;
         }
         else {
             var element = (el instanceof HTMLElement) ? el : (document.querySelector(el) || document.querySelector('#' + el));
@@ -768,19 +776,12 @@ var game = {
                 'antialias': cc.macro.ENABLE_WEBGL_ANTIALIAS,
                 'alpha': cc.macro.ENABLE_TRANSPARENT_CANVAS
             };
-            if (isWeChatGame || isQQPlay) {
-                opts['preserveDrawingBuffer'] = true;
-            }
             renderer.initWebGL(localCanvas, opts);
             this._renderContext = renderer.device._gl;
             
             // Enable dynamic atlas manager by default
             if (!cc.macro.CLEANUP_IMAGE_CACHE && dynamicAtlasManager) {
                 dynamicAtlasManager.enabled = true;
-            }
-            // Disable dynamicAtlasManager to fix rendering residue for transparent images on Chrome69.
-            if (cc.sys.browserType == cc.sys.BROWSER_TYPE_CHROME && parseFloat(cc.sys.browserVersion) >= 69.0) {
-                dynamicAtlasManager.enabled = false;
             }
         }
         if (!this._renderContext) {
@@ -802,7 +803,7 @@ var game = {
 
         // register system events
         if (this.config.registerSystemEvent)
-            inputManager.registerSystemEvent(this.canvas);
+            _cc.inputManager.registerSystemEvent(this.canvas);
 
         if (typeof document.hidden !== 'undefined') {
             hiddenPropName = "hidden";
@@ -822,10 +823,11 @@ var game = {
                 game.emit(game.EVENT_HIDE);
             }
         }
-        function onShown () {
+        // In order to adapt the most of platforms the onshow API.
+        function onShown (arg0, arg1, arg2, arg3, arg4) {
             if (hidden) {
                 hidden = false;
-                game.emit(game.EVENT_SHOW);
+                game.emit(game.EVENT_SHOW, arg0, arg1, arg2, arg3, arg4);
             }
         }
 
@@ -855,11 +857,6 @@ var game = {
 
         if (navigator.userAgent.indexOf("MicroMessenger") > -1) {
             win.onfocus = onShown;
-        }
-
-        if (CC_WECHATGAME && cc.sys.browserType !== cc.sys.BROWSER_TYPE_WECHAT_GAME_SUB) {
-            wx.onShow && wx.onShow(onShown);
-            wx.onHide && wx.onHide(onHidden);
         }
 
         if ("onpageshow" in window && "onpagehide" in window) {

@@ -25,11 +25,17 @@
  ****************************************************************************/
 
 const AffineTrans = require('../utils/affine-transform');
-const renderEngine = require('../renderer/render-engine');
 const renderer = require('../renderer/index');
 const RenderFlow = require('../renderer/render-flow');
 const game = require('../CCGame');
-const ray = require('../3d/geom-utils/ray');
+
+import geomUtils from '../geom-utils';
+let RendererCamera = null;
+if (CC_JSB && CC_NATIVERENDERER) {
+    RendererCamera = window.renderer.Camera;
+} else {
+    RendererCamera = require('../../renderer/scene/camera');
+}
 
 const mat4 = cc.vmath.mat4;
 const vec2 = cc.vmath.vec2;
@@ -38,9 +44,9 @@ const vec3 = cc.vmath.vec3;
 let _mat4_temp_1 = mat4.create();
 let _mat4_temp_2 = mat4.create();
 
-let _v3_temp_1 = vec3.create();
-let _v3_temp_2 = vec3.create();
-let _v3_temp_3 = vec3.create();
+let _v3_temp_1 = cc.v3();
+let _v3_temp_2 = cc.v3();
+let _v3_temp_3 = cc.v3();
 
 let _cameras = [];
 
@@ -76,6 +82,11 @@ let ClearFlags = cc.Enum({
     STENCIL: 4,
 });
 
+let StageFlags = cc.Enum({
+    OPAQUE: 1,
+    TRANSPARENT: 2
+});
+
 /**
  * !#en
  * Camera is usefull when making reel game or other games which need scroll screen.
@@ -92,14 +103,12 @@ let Camera = cc.Class({
 
     ctor () {
         if (game.renderType !== game.RENDER_TYPE_CANVAS) {
-            let camera = new renderEngine.Camera();
+            let camera = new RendererCamera();
 
             camera.setStages([
-                'transparent'
+                'opaque',
             ]);
 
-            let view = new renderEngine.View();
-            camera.view = view;
             camera.dirty = true;
 
             this._inited = false;
@@ -113,7 +122,7 @@ let Camera = cc.Class({
     editor: CC_EDITOR && {
         menu: 'i18n:MAIN_MENU.component.others/Camera',
         inspector: 'packages://inspector/inspectors/comps/camera.js',
-        executeInEditMode: false
+        executeInEditMode: true
     },
 
     properties: {
@@ -125,10 +134,11 @@ let Camera = cc.Class({
         _targetTexture: null,
         _fov: 60,
         _orthoSize: 10,
-        _nearClip: 0.1,
+        _nearClip: 1,
         _farClip: 4096,
         _ortho: true,
         _rect: cc.rect(0, 0, 1, 1),
+        _renderStages: 1,
 
         /**
          * !#en
@@ -319,7 +329,7 @@ let Camera = cc.Class({
             set (value) {
                 this._depth = value;
                 if (this._camera) {
-                    this._camera._sortDepth = value;
+                    this._camera.setPriority(value);
                 }
             }
         },
@@ -343,9 +353,19 @@ let Camera = cc.Class({
             }
         },
 
+        renderStages: {
+            get () {
+                return this._renderStages;
+            },
+            set (val) {
+                this._renderStages = val;
+                this._updateStages();
+            }
+        },
+
         _is3D: {
             get () {
-                return this.node._is3DNode;
+                return this.node && this.node._is3DNode;
             }
         }
     },
@@ -394,26 +414,34 @@ let Camera = cc.Class({
             return null;
         },
 
+        _findRendererCamera (node) {
+            let cameras = renderer.scene._cameras;
+            for (let i = 0; i < cameras._count; i++) {
+                if (cameras._data[i]._cullingMask & node._cullingMask) {
+                    return cameras._data[i];
+                }
+            }
+            return null;
+        },
+
         _setupDebugCamera () {
             if (_debugCamera) return;
             if (game.renderType === game.RENDER_TYPE_CANVAS) return;
-            let camera = new renderEngine.Camera();
+            let camera = new RendererCamera();
             _debugCamera = camera;
 
             camera.setStages([
-                'transparent'
+                'opaque',
             ]);
-
+            
             camera.setFov(Math.PI * 60 / 180);
             camera.setNear(0.1);
             camera.setFar(4096);
 
-            let view = new renderEngine.View();
-            camera.view = view;
             camera.dirty = true;
 
-            camera._cullingMask = camera.view._cullingMask = 1 << cc.Node.BuiltinGroupIndex.DEBUG;
-            camera._sortDepth = cc.macro.MAX_ZINDEX;
+            camera.cullingMask = 1 << cc.Node.BuiltinGroupIndex.DEBUG;
+            camera.setPriority(cc.macro.MAX_ZINDEX);
             camera.setClearFlags(0);
             camera.setColor(0, 0, 0, 0);
 
@@ -430,8 +458,7 @@ let Camera = cc.Class({
     _updateCameraMask () {
         if (this._camera) {
             let mask = this._cullingMask & (~(1 << cc.Node.BuiltinGroupIndex.DEBUG));
-            this._camera._cullingMask = mask;
-            this._camera.view._cullingMask = mask;
+            this._camera.cullingMask = mask;
         }
     },
 
@@ -451,7 +478,7 @@ let Camera = cc.Class({
         if (!this._camera) return;
 
         let texture = this._targetTexture;
-        this._camera._framebuffer = texture ? texture._framebuffer : null;
+        this._camera.setFrameBuffer(texture ? texture._framebuffer : null);
     },
 
     _updateClippingpPlanes () {
@@ -471,6 +498,18 @@ let Camera = cc.Class({
         this._camera.setRect(this._rect);
     },
 
+    _updateStages () {
+        let flags = this._renderStages;
+        let stages = [];
+        if (flags & StageFlags.OPAQUE) {
+            stages.push('opaque');
+        }
+        if (flags & StageFlags.TRANSPARENT) {
+            stages.push('transparent');
+        }
+        this._camera.setStages(stages);
+    },
+
     _init () {
         if (this._inited) return;
         this._inited = true;
@@ -479,12 +518,13 @@ let Camera = cc.Class({
         if (!camera) return;
         camera.setNode(this.node);
         camera.setClearFlags(this._clearFlags);
-        camera._sortDepth = this._depth;
+        camera._priority = this._depth;
         this._updateBackgroundColor();
         this._updateCameraMask();
         this._updateTargetTexture();
         this._updateClippingpPlanes();
         this._updateProjection();
+        this._updateStages();
     },
 
     onLoad () {
@@ -492,7 +532,7 @@ let Camera = cc.Class({
     },
 
     onEnable () {
-        if (game.renderType !== game.RENDER_TYPE_CANVAS) {
+        if (!CC_EDITOR && game.renderType !== game.RENDER_TYPE_CANVAS) {
             cc.director.on(cc.Director.EVENT_BEFORE_DRAW, this.beforeDraw, this);
             renderer.scene.addCamera(this._camera);
         }
@@ -500,7 +540,7 @@ let Camera = cc.Class({
     },
 
     onDisable () {
-        if (game.renderType !== game.RENDER_TYPE_CANVAS) {
+        if (!CC_EDITOR && game.renderType !== game.RENDER_TYPE_CANVAS) {
             cc.director.off(cc.Director.EVENT_BEFORE_DRAW, this.beforeDraw, this);
             renderer.scene.removeCamera(this._camera);
         }
@@ -590,17 +630,18 @@ let Camera = cc.Class({
         this.node.getWorldRT(_mat4_temp_1);
 
         let zoomRatio = this.zoomRatio;
-        _mat4_temp_1.m00 *= zoomRatio;
-        _mat4_temp_1.m01 *= zoomRatio;
-        _mat4_temp_1.m04 *= zoomRatio;
-        _mat4_temp_1.m05 *= zoomRatio;
+        let _mat4_temp_1m = _mat4_temp_1.m;
+        _mat4_temp_1m[0] *= zoomRatio;
+        _mat4_temp_1m[1] *= zoomRatio;
+        _mat4_temp_1m[4] *= zoomRatio;
+        _mat4_temp_1m[5] *= zoomRatio;
 
-        let m12 = _mat4_temp_1.m12;
-        let m13 = _mat4_temp_1.m13;
+        let m12 = _mat4_temp_1m[12];
+        let m13 = _mat4_temp_1m[13];
 
         let center = cc.visibleRect.center;
-        _mat4_temp_1.m12 = center.x - (_mat4_temp_1.m00 * m12 + _mat4_temp_1.m04 * m13);
-        _mat4_temp_1.m13 = center.y - (_mat4_temp_1.m01 * m12 + _mat4_temp_1.m05 * m13);
+        _mat4_temp_1m[12] = center.x - (_mat4_temp_1m[0] * m12 + _mat4_temp_1m[4] * m13);
+        _mat4_temp_1m[13] = center.y - (_mat4_temp_1m[1] * m12 + _mat4_temp_1m[5] * m13);
 
         if (out !== _mat4_temp_1) {
             mat4.copy(out, _mat4_temp_1);
@@ -618,6 +659,8 @@ let Camera = cc.Class({
      * @return {Ray}
      */
     getRay (screenPos) {
+        if (!geomUtils) return screenPos;
+        
         vec3.set(_v3_temp_3, screenPos.x, screenPos.y, 1);
         this._camera.screenToWorld(_v3_temp_2, _v3_temp_3, cc.visibleRect.width, cc.visibleRect.height);
 
@@ -629,7 +672,7 @@ let Camera = cc.Class({
             this.node.getWorldPosition(_v3_temp_1);
         }
 
-        return ray.fromPoints(ray.create(), _v3_temp_1, _v3_temp_2);
+        return geomUtils.Ray.fromPoints(geomUtils.Ray.create(), _v3_temp_1, _v3_temp_2);
     },
 
     /**
@@ -660,7 +703,7 @@ let Camera = cc.Class({
         // force update node world matrix
         this.node.getWorldMatrix(_mat4_temp_1);
         this.beforeDraw();
-        RenderFlow.visit(root);
+        RenderFlow.render(root);
         renderer._forward.renderCamera(this._camera, renderer.scene);
     },
 

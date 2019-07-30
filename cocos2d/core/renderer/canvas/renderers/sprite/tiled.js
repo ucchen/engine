@@ -24,7 +24,6 @@
  ****************************************************************************/
 
 const utils = require('../utils');
-const simple = require('./simple');
 
 let renderer = {
     createData (sprite) {
@@ -42,15 +41,16 @@ let renderer = {
         let node = sprite.node;
         // Transform
         let matrix = node._worldMatrix;
-        let a = matrix.m00, b = matrix.m01, c = matrix.m04, d = matrix.m05,
-            tx = matrix.m12, ty = matrix.m13;
+        let matrixm = matrix.m;
+        let a = matrixm[0], b = matrixm[1], c = matrixm[4], d = matrixm[5],
+            tx = matrixm[12], ty = matrixm[13];
         ctx.transform(a, b, c, d, tx, ty);
         ctx.scale(1, -1);
 
         // TODO: handle blend function
 
         // opacity
-        ctx.globalAlpha = node.opacity / 255;
+        utils.context.setGlobalAlpha(ctx, node.opacity / 255);
 
         let frame = sprite.spriteFrame;
         let rect = frame._rect;

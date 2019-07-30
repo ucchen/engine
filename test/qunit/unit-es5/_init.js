@@ -39,7 +39,7 @@ var TestTexture = cc.Class({
          */
         width: {
             default: 0,
-            type: 'Integer',
+            type: cc.Integer,
             readonly: true
         },
 
@@ -49,7 +49,7 @@ var TestTexture = cc.Class({
          */
         height: {
             default: 0,
-            type: 'Integer',
+            type: cc.Integer,
             readonly: true
         },
     }
@@ -211,9 +211,8 @@ function _resetGame (w, h) {
     }
     // Forbid render in test
     cc.renderer.render = function () {};
-    cc.director.purgeDirector();
     cc.loader.releaseAll();
-
+    cc.director.reset();
     cc.director.runSceneImmediate(new cc.Scene());
     //cc.director.pause();
 }

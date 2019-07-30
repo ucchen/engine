@@ -1,19 +1,49 @@
-const renderEngine = require('../render-engine');
-const gfx = renderEngine.gfx;
+/****************************************************************************
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated engine source code (the "Software"), a limited,
+ worldwide, royalty-free, non-assignable, revocable and non-exclusive license
+ to use Cocos Creator solely to develop games on your target platforms. You shall
+ not use Cocos Creator software for developing other software or tools that's
+ used for developing games. You are not granted to publish, distribute,
+ sublicense, and/or sell copies of Cocos Creator.
+
+ The software or tools in this License Agreement are licensed, not sold.
+ Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ ****************************************************************************/
+
+import gfx from '../../../renderer/gfx';
 
 let MeshBuffer = cc.Class({
     name: 'cc.MeshBuffer',
     ctor (batcher, vertexFormat) {
-        this.byteStart = 0;
+        this.init (batcher, vertexFormat);
+    },
+
+    init (batcher, vertexFormat) {
         this.byteOffset = 0;
-        this.indiceStart = 0;
         this.indiceOffset = 0;
-        this.vertexStart = 0;
         this.vertexOffset = 0;
+        this.indiceStart = 0;
+
+        this._dirty = false;
 
         this._vertexFormat = vertexFormat;
         this._vertexBytes = this._vertexFormat._bytes;
 
+        this._arrOffset = 0;
+        this._vbArr = [];
         this._vb = new gfx.VertexBuffer(
             batcher._device,
             vertexFormat,
@@ -21,7 +51,9 @@ let MeshBuffer = cc.Class({
             new ArrayBuffer(),
             0
         );
+        this._vbArr[0] = this._vb;
 
+        this._ibArr = [];
         this._ib = new gfx.IndexBuffer(
             batcher._device,
             gfx.INDEX_FMT_UINT16,
@@ -29,16 +61,22 @@ let MeshBuffer = cc.Class({
             new ArrayBuffer(),
             0
         );
+        this._ibArr[0] = this._ib;
 
         this._vData = null;
-        this._iData = null;
         this._uintVData = null;
+        this._iData = null;
 
         this._batcher = batcher;
 
-        this._initVDataCount = 256 * vertexFormat._bytes; // actually 256 * 4 * (vertexFormat._bytes / 4)
+        this._initVDataCount = 256 * vertexFormat._bytes;// actually 256 * 4 * (vertexFormat._bytes / 4)
         this._initIDataCount = 256 * 6;
         
+        this._offsetInfo = {
+            byteOffset : 0,
+            vertexOffset : 0,
+            indiceOffset : 0
+        }
         this._reallocBuffer();
     },
 
@@ -60,7 +98,53 @@ let MeshBuffer = cc.Class({
         this._dirty = false;
     },
 
+    switchBuffer () {
+        let offset = ++this._arrOffset;
+
+        this.byteOffset = 0;
+        this.vertexOffset = 0;
+        this.indiceOffset = 0;
+        this.indiceStart = 0;
+
+        if (offset < this._vbArr.length) {
+            this._vb = this._vbArr[offset];
+            this._ib = this._ibArr[offset];
+        } else {
+
+            this._vb = new gfx.VertexBuffer(
+                this._batcher._device,
+                this._vertexFormat,
+                gfx.USAGE_DYNAMIC,
+                new ArrayBuffer(),
+                0
+            );
+            this._vbArr[offset] = this._vb;
+            this._vb._bytes = this._vData.byteLength;
+
+            this._ib = new gfx.IndexBuffer(
+                this._batcher._device,
+                gfx.INDEX_FMT_UINT16,
+                gfx.USAGE_STATIC,
+                new ArrayBuffer(),
+                0
+            );
+            this._ibArr[offset] = this._ib;
+            this._ib._bytes = this._iData.byteLength;
+        }
+    },
+
+    checkAndSwitchBuffer (vertexCount) {
+        if (this.vertexOffset + vertexCount > 65535) {
+            this.uploadData();
+            this._batcher._flush();
+            this.switchBuffer();
+        }
+    },
+
     requestStatic (vertexCount, indiceCount) {
+
+        this.checkAndSwitchBuffer(vertexCount);
+
         let byteOffset = this.byteOffset + vertexCount * this._vertexBytes;
         let indiceOffset = this.indiceOffset + indiceCount;
 
@@ -77,10 +161,18 @@ let MeshBuffer = cc.Class({
 
             this._reallocBuffer();
         }
+        this._updateOffset(vertexCount, indiceCount, byteOffset);
+    },
 
+    _updateOffset (vertexCount, indiceCount, byteOffset) {
+        let offsetInfo = this._offsetInfo;
+        offsetInfo.vertexOffset = this.vertexOffset;
         this.vertexOffset += vertexCount;
+
+        offsetInfo.indiceOffset = this.indiceOffset;
         this.indiceOffset += indiceCount;
-        
+
+        offsetInfo.byteOffset = this.byteOffset;
         this.byteOffset = byteOffset;
 
         this._dirty = true;
@@ -93,6 +185,7 @@ let MeshBuffer = cc.Class({
         }
 
         this.requestStatic(vertexCount, indiceCount);
+        return this._offsetInfo;
     },
     
     _reallocBuffer () {
@@ -108,6 +201,7 @@ let MeshBuffer = cc.Class({
 
         this._vData = new Float32Array(this._initVDataCount);
         this._uintVData = new Uint32Array(this._vData.buffer);
+
         let newData = new Uint8Array(this._uintVData.buffer);
 
         if (oldVData && copyOldData) {
@@ -135,18 +229,38 @@ let MeshBuffer = cc.Class({
     },
 
     reset () {
-        this.byteStart = 0;
+        this._arrOffset = 0;
+        this._vb = this._vbArr[0];
+        this._ib = this._ibArr[0];
+
         this.byteOffset = 0;
-        this.indiceStart = 0;
         this.indiceOffset = 0;
-        this.vertexStart = 0;
         this.vertexOffset = 0;
+        this.indiceStart = 0;
+
         this._dirty = false;
     },
 
     destroy () {
-        this._ib.destroy();
-        this._vb.destroy();
+        this.reset();
+        for (let i = 0; i <  this._vbArr.length; i++) {
+            let vb = this._vbArr[i];
+            vb.destroy();
+        }
+        this._vbArr = null;
+
+        for (let i = 0; i < this._ibArr.length; i++) {
+            let ib = this._ibArr[i];
+            ib.destroy();
+        }
+        this._ibArr = null;
+
+        this._ib = null;
+        this._vb = null;
+    },
+
+    forwardIndiceStartToOffset () {
+        this.indiceStart = this.indiceOffset;
     }
 });
 

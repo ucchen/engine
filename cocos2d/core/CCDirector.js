@@ -108,7 +108,6 @@ const Scheduler = require('./CCScheduler');
 cc.Director = function () {
     EventTarget.call(this);
 
-    this.invalid = false;
     // paused?
     this._paused = false;
     // purge?
@@ -214,9 +213,8 @@ cc.Director.prototype = {
     /**
      * calculates delta time since last time it was called
      */
-    calculateDeltaTime: function () {
-        var now = performance.now();
-
+    calculateDeltaTime: function (now) {
+        if (!now) now = performance.now();
         this._deltaTime = (now - this._lastUpdate) / 1000;
         if (CC_DEBUG && (this._deltaTime > 1))
             this._deltaTime = 1 / 60.0;
@@ -350,16 +348,17 @@ cc.Director.prototype = {
         if (eventManager)
             eventManager.setEnabled(false);
 
-        cc.renderer.clear();
-
         if (!CC_EDITOR) {
             if (cc.isValid(this._scene)) {
                 this._scene.destroy();
             }
             this._scene = null;
+
+            cc.renderer.clear();
+            cc.AssetLibrary.resetBuiltins();
         }
 
-        this.stopAnimation();
+        cc.game.pause();
 
         // Clear all caches
         cc.loader.releaseAll();
@@ -394,7 +393,7 @@ cc.Director.prototype = {
             this._scheduler.scheduleUpdate(this._physicsManager, cc.Scheduler.PRIORITY_SYSTEM, false);
         }
 
-        this.startAnimation();
+        cc.game.resume();
     },
 
     /**
@@ -468,7 +467,7 @@ cc.Director.prototype = {
         CC_BUILD && CC_DEBUG && console.timeEnd('Activate');
 
         //start scene
-        this.startAnimation();
+        cc.game.resume();
 
         if (onLaunched) {
             onLaunched(null, scene);
@@ -579,6 +578,7 @@ cc.Director.prototype = {
      * @param {Object} onProgress.item - The latest item which flow out the pipeline
      * @param {Function} [onLoaded] - callback, will be called after scene loaded.
      * @param {Error} onLoaded.error - null or the error object.
+     * @param {cc.SceneAsset} onLoaded.asset - The scene asset itself.
      */
     preloadScene: function (sceneName, onProgress, onLoaded) {
         if (onLoaded === undefined) {
@@ -880,17 +880,23 @@ cc.Director.prototype = {
     // Loop management
     /*
      * Starts Animation
+     * @deprecated since v2.1.2
      */
     startAnimation: function () {
-        this.invalid = false;
-        this._lastUpdate = performance.now();
+        cc.game.resume();
     },
 
     /*
      * Stops animation
+     * @deprecated since v2.1.2
      */
     stopAnimation: function () {
-        this.invalid = true;
+        cc.game.pause();
+    },
+
+    _resetDeltaTime () {
+        this._lastUpdate = performance.now();
+        this._deltaTime = 0;
     },
 
     /*
@@ -917,21 +923,21 @@ cc.Director.prototype = {
 
         // Render
         this.emit(cc.Director.EVENT_BEFORE_DRAW);
-        renderer.render(this._scene);
+        renderer.render(this._scene, deltaTime);
         
         // After draw
         this.emit(cc.Director.EVENT_AFTER_DRAW);
 
         this._totalFrames++;
 
-    } : function () {
+    } : function (now) {
         if (this._purgeDirectorInNextLoop) {
             this._purgeDirectorInNextLoop = false;
             this.purgeDirector();
         }
-        else if (!this.invalid) {
+        else {
             // calculate "global" dt
-            this.calculateDeltaTime();
+            this.calculateDeltaTime(now);
 
             // Update
             if (!this._paused) {
@@ -952,7 +958,7 @@ cc.Director.prototype = {
 
             // Render
             this.emit(cc.Director.EVENT_BEFORE_DRAW);
-            renderer.render(this._scene);
+            renderer.render(this._scene, this._deltaTime);
 
             // After draw
             this.emit(cc.Director.EVENT_AFTER_DRAW);
@@ -963,11 +969,11 @@ cc.Director.prototype = {
     },
 
     __fastOn: function (type, callback, target) {
-        this.add(type, callback, target);
+        this.on(type, callback, target);
     },
 
     __fastOff: function (type, callback, target) {
-        this.remove(type, callback, target);
+        this.off(type, callback, target);
     },
 };
 

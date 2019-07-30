@@ -24,10 +24,11 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+import { vec2 } from '../vmath';
+
 const ValueType = require('./value-type');
 const js = require('../platform/js');
 const CCClass = require('../platform/CCClass');
-const math = require('../renderer/render-engine').math;
 const misc = require('../utils/misc');
 
 /**
@@ -68,6 +69,8 @@ CCClass.fastDefine('cc.Vec2', Vec2, { x: 0, y: 0 });
 
 var proto = Vec2.prototype;
 
+// compatible with vec3
+js.value(proto, 'z', 0, true);
 
 /**
  * !#en clone a Vec2 object
@@ -167,9 +170,9 @@ proto.lerp = function (to, ratio, out) {
  * @example
  * var min_inclusive = cc.v2(0, 0);
  * var max_inclusive = cc.v2(20, 20);
- * var v1 = cc.v2(20, 20).clamp(min_inclusive, max_inclusive); // Vec2 {x: 20, y: 20};
- * var v2 = cc.v2(0, 0).clamp(min_inclusive, max_inclusive);   // Vec2 {x: 0, y: 0};
- * var v3 = cc.v2(10, 10).clamp(min_inclusive, max_inclusive); // Vec2 {x: 10, y: 10};
+ * var v1 = cc.v2(20, 20).clampf(min_inclusive, max_inclusive); // Vec2 {x: 20, y: 20};
+ * var v2 = cc.v2(0, 0).clampf(min_inclusive, max_inclusive);   // Vec2 {x: 0, y: 0};
+ * var v3 = cc.v2(10, 10).clampf(min_inclusive, max_inclusive); // Vec2 {x: 10, y: 10};
  */
 proto.clampf = function (min_inclusive, max_inclusive) {
     this.x = misc.clampf(this.x, min_inclusive.x, max_inclusive.x);
@@ -329,7 +332,7 @@ proto.scale = function (vector, out) {
  * !#en Divides by a number. If you want to save result to another vector, use div() instead.
  * !#zh 向量除法。如果你想结果保存到另一个向量，可使用 div() 代替。
  * @method divSelf
- * @param {Vec2} divisor
+ * @param {number} divisor
  * @return {Vec2} returns this
  * @chainable
  * @example
@@ -589,7 +592,33 @@ proto.project = function (vector) {
  */
 proto.transformMat4 = function (m, out) {
     out = out || new Vec2();
-    math.vec2.transformMat4(out, this, m);
+    vec2.transformMat4(out, this, m);
+};
+
+proto.fromTranslation = function (trs) {
+    this.x = trs[0];
+    this.y = trs[1];
+    return this;
+};
+
+proto.toTranslation = function (trs) {
+    trs[0] = this.x;
+    trs[1] = this.y;
+};
+
+proto.fromScale = function (trs) {
+    this.x = trs[7];
+    this.y = trs[8];
+    return this;
+};
+
+proto.toScale = function (trs) {
+    trs[7] = this.x;
+    trs[8] = this.y;
+};
+
+proto.array = function (out) {
+    vec2.array(out, this);
 };
 
 //_serialize: function () {

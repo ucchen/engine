@@ -91,8 +91,8 @@ const ResourceType = cc.Enum({
 
 
 /**
- * !#en cc.VideoPlayer is a component for playing videos, you can use it for showing videos in your game.
- * !#zh Video 组件，用于在游戏中播放视频
+ * !#en cc.VideoPlayer is a component for playing videos, you can use it for showing videos in your game. Because different platforms have different authorization, API and control methods for VideoPlayer component. And have not yet formed a unified standard, only Web, iOS, and Android platforms are currently supported.
+ * !#zh Video 组件，用于在游戏中播放视频。由于不同平台对于 VideoPlayer 组件的授权、API、控制方式都不同，还没有形成统一的标准，所以目前只支持 Web、iOS 和 Android 平台。
  * @class VideoPlayer
  * @extends Component
  */
@@ -233,6 +233,8 @@ let VideoPlayer = cc.Class({
          * !#en Whether keep the aspect ration of the original video.
          * !#zh 是否保持视频原来的宽高比
          * @property {Boolean} keepAspectRatio
+         * @type {Boolean}
+         * @default true
          */
         keepAspectRatio: {
             tooltip: CC_DEV && 'i18n:COMPONENT.videoplayer.keepAspectRatio',
@@ -247,14 +249,24 @@ let VideoPlayer = cc.Class({
          * !#en Whether play video in fullscreen mode.
          * !#zh 是否全屏播放视频
          * @property {Boolean} isFullscreen
+         * @type {Boolean}
+         * @default false
          */
-        isFullscreen: {
-            tooltip: CC_DEV && 'i18n:COMPONENT.videoplayer.isFullscreen',
+        _isFullscreen: {
             default: false,
-            type: cc.Boolean,
-            notify: function () {
-                this._impl.setFullScreenEnabled(this.isFullscreen);
-            }
+            formerlySerializedAs: '_N$isFullscreen',
+        },
+        isFullscreen: {
+            get () {
+                this._isFullscreen = this._impl.isFullScreenEnabled();
+                return this._isFullscreen;
+            },
+            set (enable) {
+                this._isFullscreen = enable;
+                this._impl.setFullScreenEnabled(enable);
+            },
+            animatable: false,
+            tooltip: CC_DEV && 'i18n:COMPONENT.videoplayer.isFullscreen'
         },
 
         /**
@@ -297,13 +309,13 @@ let VideoPlayer = cc.Class({
         if (url && cc.loader.md5Pipe) {
             url = cc.loader.md5Pipe.transformURL(url);
         }
-        this._impl.setURL(url);
+        this._impl.setURL(url, this._mute || this._volume === 0);
     },
 
     onLoad () {
         let impl = this._impl;
         if (impl) {
-            impl.createDomElementIfNeeded();
+            impl.createDomElementIfNeeded(this._mute || this._volume === 0);
             this._updateVideoSource();
 
             impl.seekTo(this.currentTime);
